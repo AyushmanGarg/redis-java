@@ -31,7 +31,7 @@ public class Main {
           OutputStream outputStream = clientSocket.getOutputStream();
           BufferedReader in = new BufferedReader(
           new InputStreamReader(clientSocket.getInputStream()))){
-            
+            HashMap<String, String> map = new HashMap<>();
             while(true) {
               if(in.readLine() == null) {
                 break;
@@ -48,7 +48,9 @@ public class Main {
                 System.out.println("Last line: " );
                 outputStream.flush();
               } else if(line.equalsIgnoreCase("SET")) {
-                System.out.println("SET");
+                // System.out.println("SET");
+                String key  = in.readLine();
+                String value = in.readLine();
               } else if(line.equalsIgnoreCase("GET")) {
                 System.out.println("GET" );
               }
