@@ -44,7 +44,7 @@ public class Main {
                 outputStream.flush();
               } else if(line.equalsIgnoreCase("echo")) {
                 String numBytes = in.readLine();
-                outputStream.write((in.readLine()+"\r\n").getBytes());
+                outputStream.write(("+"+in.readLine()+"\r\n").getBytes());
                 System.out.println("Last line: " );
                 outputStream.flush();
               }
