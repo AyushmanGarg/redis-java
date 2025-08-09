@@ -61,6 +61,8 @@ public class Main {
             String time = in.readLine();
             Long expry_time = System.currentTimeMillis() + Long.valueOf(time);
             expiry_map.put(key, expry_time);
+            map.put(key, value);
+            outputStream.write(("+" + "OK" + "\r\n").getBytes());
           }
         } else if (line.equalsIgnoreCase("GET")) {
           System.out.println("GET");
