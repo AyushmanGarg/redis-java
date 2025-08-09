@@ -39,9 +39,16 @@ public class Main {
               in.readLine();
               String line = in.readLine();
               System.out.println("Last line: " + line);
-
-              outputStream.write("+PONG\r\n".getBytes());
-              System.out.println("Wrote pong");
+              if(line.equalsIgnoreCase("echo")) {
+                outputStream.write("+PONG\r\n".getBytes());
+                outputStream.flush();
+              } else if(line.equalsIgnoreCase("echo")) {
+                String content = in.readLine();
+                outputStream.write(content);
+                outputStream.flush();
+              }
+              // outputStream.write("+PONG\r\n".getBytes());
+              // System.out.println("Wrote pong");
             }
 
       } catch (Exception e) {
