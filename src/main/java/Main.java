@@ -44,15 +44,11 @@ public class Main {
                 outputStream.write("+PONG\r\n".getBytes());
                 outputStream.flush();
               } else if(line.equalsIgnoreCase("echo")) {
-                String numBytes = in.readLine();
                 outputStream.write(("+"+in.readLine()+"\r\n").getBytes());
                 System.out.println("Last line: " );
                 outputStream.flush();
               } else if(line.equalsIgnoreCase("SET")) {
-                // System.out.println("SET");
-                String key_bytes  = in.readLine();
                 String key = in.readLine();
-                String value_bytes = in.readLine();
                 String value = in.readLine();
                 System.out.println(key + " " + value);
                 map.put(key, value);
@@ -61,9 +57,15 @@ public class Main {
                 System.out.println("GET" );
                 in.readLine();
                 String key = in.readLine();
-                byte[] bytes = (map.get(key)).getBytes();
-                System.out.println("GET" + bytes);
-                outputStream.write(("$"+bytes.length+"\r\n"+map.get(key)+"\r\n").getBytes());
+                String value = map.get(key);
+                if(value!= null) {
+                  byte[] bytes = (map.get(key)).getBytes();
+                  System.out.println("GET" + bytes);
+                  outputStream.write(("$"+bytes.length+"\r\n"+map.get(key)+"\r\n").getBytes());
+                } else {
+                  outputStream.write("$-1\r\n".getBytes());
+                }
+                
               }
 
             }
