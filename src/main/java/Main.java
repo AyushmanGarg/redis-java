@@ -58,7 +58,7 @@ public class Main {
                 in.readLine();
                 String key = in.readLine();
                 byte[] bytes = (map.get(key)).getBytes();
-                System.out.println("GET" + bytes);
+                System.out.println("$"+bytes.length+"\r\n"+map.get(key)+"\r\n" + "GET");
                 outputStream.write(("$"+bytes.length+"\r\n"+map.get(key)+"\r\n").getBytes());
               }
 
