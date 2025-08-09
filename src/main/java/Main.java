@@ -56,12 +56,13 @@ public class Main {
                 String value = in.readLine();
                 System.out.println(key + " " + value);
                 map.put(key, value);
-                outputStream.write(("OK").getBytes());
+                outputStream.write(("OK" + "\r\n").getBytes());
               } else if(line.equalsIgnoreCase("GET")) {
                 System.out.println("GET" );
                 in.readLine();
                 String key = in.readLine();
-                outputStream.write((map[key]).getBytes());
+                byte[] bytes = (map.get(key)).getBytes();
+                outputStream.write(("$"+bytes+"\r\n"+map.get(key)+"\r\n").getBytes());
               }
 
             }
