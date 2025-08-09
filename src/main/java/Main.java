@@ -55,8 +55,8 @@ public class Main {
                 outputStream.write(("+"+"OK" + "\r\n").getBytes());
               } else if(line.equalsIgnoreCase("GET")) {
                 System.out.println("GET" );
-                in.readLine();
                 String key = in.readLine();
+                key = in.readLine();
                 String value = map.get(key);
                 if(value!= null) {
                   byte[] bytes = (map.get(key)).getBytes();
