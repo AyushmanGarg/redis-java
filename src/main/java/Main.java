@@ -48,7 +48,9 @@ public class Main {
           System.out.println("Last line: ");
           outputStream.flush();
         } else if (line.equalsIgnoreCase("SET")) {
+          in.readLine();
           String key = in.readLine();
+          in.readLine();
           String value = in.readLine();
           System.out.println(key + " " + value);
           map.put(key, value);
