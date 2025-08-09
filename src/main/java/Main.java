@@ -8,7 +8,7 @@ import java.io.OutputStream;
 public class Main {
     public static void main(String[] args) {
         ServerSocket serverSocket = null;
-        Socket clientSocket = null;
+        // Socket clientSocket = null;
         int port = 6379;
 
         try {
