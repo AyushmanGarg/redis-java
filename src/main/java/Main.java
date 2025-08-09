@@ -50,7 +50,9 @@ public class Main {
                 outputStream.flush();
               } else if(line.equalsIgnoreCase("SET")) {
                 // System.out.println("SET");
-                String key  = in.readLine();
+                String key_bytes  = in.readLine();
+                String key = in.readLine();
+                String value_bytes = in.readLine();
                 String value = in.readLine();
                 System.out.println(key + " " + value);
               } else if(line.equalsIgnoreCase("GET")) {
