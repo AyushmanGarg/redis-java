@@ -4,6 +4,7 @@ import java.net.Socket;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.util.HashMap;
 
 public class Main {
     public static void main(String[] args) {
@@ -51,6 +52,7 @@ public class Main {
                 // System.out.println("SET");
                 String key  = in.readLine();
                 String value = in.readLine();
+                System.out.println(key + " " + value);
               } else if(line.equalsIgnoreCase("GET")) {
                 System.out.println("GET" );
               }
