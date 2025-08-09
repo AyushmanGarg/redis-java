@@ -66,7 +66,7 @@ public class Main {
           System.out.println("GET");
           in.readLine();
           String key = in.readLine();
-          if(map.get(key) != null && System.currentTimeMillis()<expiry_map.get(key)) {
+          if(map.get(key) != null && (expiry_map.get(key)!=null || System.currentTimeMillis()<expiry_map.get(key))) {
             byte[] bytes = (map.get(key)).getBytes();
             outputStream.write(("$" + bytes.length + "\r\n" + map.get(key) + "\r\n").getBytes());
           } else if(map.get(key) != null && System.currentTimeMillis()>=expiry_map.get(key)) {
