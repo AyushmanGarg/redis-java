@@ -55,8 +55,13 @@ public class Main {
                 String value_bytes = in.readLine();
                 String value = in.readLine();
                 System.out.println(key + " " + value);
+                map.put(key, value);
+                outputStream.write(("OK").getBytes());
               } else if(line.equalsIgnoreCase("GET")) {
                 System.out.println("GET" );
+                in.readLine();
+                String key = in.readLine();
+                outputStream.write((map[key]).getBytes());
               }
 
             }
