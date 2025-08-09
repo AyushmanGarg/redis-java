@@ -33,38 +33,47 @@ public class Main {
         BufferedReader in = new BufferedReader(
             new InputStreamReader(clientSocket.getInputStream()))) {
       HashMap<String, String> map = new HashMap<>();
+      HashMap<String, Long> expiry_map = new HashMap<>();
       while (true) {
         if (in.readLine() == null) {
           break;
         }
         in.readLine();
         String line = in.readLine();
-        System.out.println("Last line: " + line);
         if (line.equalsIgnoreCase("ping")) {
           outputStream.write("+PONG\r\n".getBytes());
           outputStream.flush();
         } else if (line.equalsIgnoreCase("echo")) {
           in.readLine();
           outputStream.write(("+" + in.readLine() + "\r\n").getBytes());
-          System.out.println("Last line: ");
           outputStream.flush();
         } else if (line.equalsIgnoreCase("SET")) {
           in.readLine();
           String key = in.readLine();
           in.readLine();
           String value = in.readLine();
-          System.out.println(key + " " + value);
+          in.readLine();
+          String args = in.readLine();
+          if(args.equalsIgnoreCase("px")) {
+            in.readLine();
+            String time = in.readLine();
+            Long expry_time = System.currentTimeMillis() + Long.valueOf(time);
+            expiry_map.put(key, expry_time);
+          }
           map.put(key, value);
           outputStream.write(("+" + "OK" + "\r\n").getBytes());
         } else if (line.equalsIgnoreCase("GET")) {
           System.out.println("GET");
           in.readLine();
           String key = in.readLine();
-          if(map.get(key) != null) {
+          if(map.get(key) != null && System.currentTimeMillis()<expiry_map.get(key)) {
             byte[] bytes = (map.get(key)).getBytes();
-            System.out.println("$"+bytes.length+"\r\n"+map.get(key)+"\r\n" + "GET");
             outputStream.write(("$" + bytes.length + "\r\n" + map.get(key) + "\r\n").getBytes());
-          } else {
+          } else if(map.get(key) != null && System.currentTimeMillis()>=expiry_map.get(key)) {
+            map.remove(key);
+            expiry_map.remove(key);
+            outputStream.write("$-1\r\n".getBytes());
+          }else {
             outputStream.write("$-1\r\n".getBytes());
           }
           
