@@ -39,12 +39,13 @@ public class Main {
               in.readLine();
               String line = in.readLine();
               System.out.println("Last line: " + line);
-              if(line.equalsIgnoreCase("echo")) {
+              if(line.equalsIgnoreCase("ping")) {
                 outputStream.write("+PONG\r\n".getBytes());
                 outputStream.flush();
               } else if(line.equalsIgnoreCase("echo")) {
                 String content = in.readLine();
                 outputStream.write((content).getBytes());
+                System.out.println("Last line: " + content);
                 outputStream.flush();
               }
               // outputStream.write("+PONG\r\n".getBytes());
