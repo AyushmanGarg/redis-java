@@ -56,7 +56,7 @@ public class Main {
                 String value = in.readLine();
                 System.out.println(key + " " + value);
                 map.put(key, value);
-                outputStream.write(("OK" + "\r\n").getBytes());
+                outputStream.write(("+"+"OK" + "\r\n").getBytes());
               } else if(line.equalsIgnoreCase("GET")) {
                 System.out.println("GET" );
                 in.readLine();
