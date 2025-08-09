@@ -59,13 +59,13 @@ public class Main {
                 key = in.readLine();
                 String value = map.get(key);
                 System.out.println(value+ " "+ key);
-                if(value!= null) {
+                // if(value!= null) {
                   byte[] bytes = (map.get(key)).getBytes();
                   System.out.println("GET" + bytes);
                   outputStream.write(("$"+bytes.length+"\r\n"+map.get(key)+"\r\n").getBytes());
-                } else {
-                  outputStream.write("$-1\r\n".getBytes());
-                }
+                // } else {
+                  // outputStream.write("$-1\r\n".getBytes());
+                // }
                 
               }
 
