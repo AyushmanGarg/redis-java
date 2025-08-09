@@ -43,9 +43,9 @@ public class Main {
                 outputStream.write("+PONG\r\n".getBytes());
                 outputStream.flush();
               } else if(line.equalsIgnoreCase("echo")) {
-                String content = in.readLine();
-                outputStream.write((content).getBytes());
-                System.out.println("Last line: " + content);
+                String numBytes = in.readLine();
+                outputStream.write(numBytes+"\r\n"+in.readLine()+"\r\n");
+                System.out.println("Last line: " );
                 outputStream.flush();
               }
               // outputStream.write("+PONG\r\n".getBytes());
