@@ -44,7 +44,7 @@ public class Main {
                 outputStream.flush();
               } else if(line.equalsIgnoreCase("echo")) {
                 String content = in.readLine();
-                outputStream.write(content);
+                outputStream.write((content).getBytes());
                 outputStream.flush();
               }
               // outputStream.write("+PONG\r\n".getBytes());
