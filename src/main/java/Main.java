@@ -60,9 +60,14 @@ public class Main {
           System.out.println("GET");
           in.readLine();
           String key = in.readLine();
-          byte[] bytes = (map.get(key)).getBytes();
-          System.out.println("$"+bytes.length+"\r\n"+map.get(key)+"\r\n" + "GET");
-          outputStream.write(("$" + bytes.length + "\r\n" + map.get(key) + "\r\n").getBytes());
+          if(map.get(key) != null) {
+            byte[] bytes = (map.get(key)).getBytes();
+            System.out.println("$"+bytes.length+"\r\n"+map.get(key)+"\r\n" + "GET");
+            outputStream.write(("$" + bytes.length + "\r\n" + map.get(key) + "\r\n").getBytes());
+          } else {
+            outputStream.write("$-1\r\n".getBytes());
+          }
+          
         }
 
       }
