@@ -43,8 +43,8 @@ public class Main {
                 outputStream.write("+PONG\r\n".getBytes());
                 outputStream.flush();
               } else if(line.equalsIgnoreCase("echo")) {
-                String numBytes = in.readLine();
-                outputStream.write(numBytes+"\r\n"+in.readLine()+"\r\n");
+                // String numBytes = in.readLine();
+                outputStream.write((in.readLine()+"\r\n").getBytes());
                 System.out.println("Last line: " );
                 outputStream.flush();
               }
