@@ -58,6 +58,7 @@ public class Main {
                 String key = in.readLine();
                 key = in.readLine();
                 String value = map.get(key);
+                System.out.println(value+ " "+ key);
                 if(value!= null) {
                   byte[] bytes = (map.get(key)).getBytes();
                   System.out.println("GET" + bytes);
