@@ -62,7 +62,7 @@ public class Main {
                 in.readLine();
                 String key = in.readLine();
                 byte[] bytes = (map.get(key)).getBytes();
-                outputStream.write((bytes+"\r\n"+map.get(key)+"\r\n").getBytes());
+                outputStream.write(("\r\n"+map.get(key)+"\r\n").getBytes());
               }
 
             }
