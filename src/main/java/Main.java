@@ -52,34 +52,33 @@ public class Main {
           String key = in.readLine();
           in.readLine();
           String value = in.readLine();
-          in.readLine();
-          String args = in.readLine();
-          if(args.equalsIgnoreCase("px")) {
-            in.readLine();
+          String maybeLen = in.ready() ? in.readLine() : null;
+          if(maybeLen == null) {
+            map.put(key, value);
+            outputStream.write(("+" + "OK" + "\r\n").getBytes());
+          } else if (in.readLine().equalsIgnoreCase("px")) {
             String time = in.readLine();
             Long expry_time = System.currentTimeMillis() + Long.valueOf(time);
             expiry_map.put(key, expry_time);
           }
-          map.put(key, value);
-          outputStream.write(("+" + "OK" + "\r\n").getBytes());
         } else if (line.equalsIgnoreCase("GET")) {
           System.out.println("GET");
           in.readLine();
           String key = in.readLine();
-          if(map.get(key) != null && expiry_map.get(key)==null){
+          if (map.get(key) != null && expiry_map.get(key) == null) {
             byte[] bytes = (map.get(key)).getBytes();
             outputStream.write(("$" + bytes.length + "\r\n" + map.get(key) + "\r\n").getBytes());
-          } else if(map.get(key) != null && System.currentTimeMillis()<expiry_map.get(key)) {
+          } else if (map.get(key) != null && System.currentTimeMillis() < expiry_map.get(key)) {
             byte[] bytes = (map.get(key)).getBytes();
             outputStream.write(("$" + bytes.length + "\r\n" + map.get(key) + "\r\n").getBytes());
-          } else if(map.get(key) != null && System.currentTimeMillis()>=expiry_map.get(key)) {
+          } else if (map.get(key) != null && System.currentTimeMillis() >= expiry_map.get(key)) {
             map.remove(key);
             expiry_map.remove(key);
             outputStream.write("$-1\r\n".getBytes());
-          }else {
+          } else {
             outputStream.write("$-1\r\n".getBytes());
           }
-          
+
         }
 
       }
