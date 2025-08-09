@@ -53,10 +53,11 @@ public class Main {
           in.readLine();
           String value = in.readLine();
           String maybeLen = in.ready() ? in.readLine() : null;
-          if(maybeLen == null) {
+          if (maybeLen == null) {
             map.put(key, value);
             outputStream.write(("+" + "OK" + "\r\n").getBytes());
           } else if (in.readLine().equalsIgnoreCase("px")) {
+            in.readLine();
             String time = in.readLine();
             Long expry_time = System.currentTimeMillis() + Long.valueOf(time);
             expiry_map.put(key, expry_time);
