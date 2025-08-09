@@ -47,9 +47,12 @@ public class Main {
                 outputStream.write(("+"+in.readLine()+"\r\n").getBytes());
                 System.out.println("Last line: " );
                 outputStream.flush();
+              } else if(line.equalsIgnoreCase("SET")) {
+                System.out.println("SET");
+              } else if(line.equalsIgnoreCase("GET")) {
+                System.out.println("GET" );
               }
-              // outputStream.write("+PONG\r\n".getBytes());
-              // System.out.println("Wrote pong");
+
             }
 
       } catch (Exception e) {
