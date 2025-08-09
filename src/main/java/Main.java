@@ -55,18 +55,12 @@ public class Main {
                 outputStream.write(("+"+"OK" + "\r\n").getBytes());
               } else if(line.equalsIgnoreCase("GET")) {
                 System.out.println("GET" );
+                in.readLine();
                 String key = in.readLine();
-                key = in.readLine();
                 String value = map.get(key);
-                System.out.println(value+ " "+ key);
-                // if(value!= null) {
-                  byte[] bytes = (map.get(key)).getBytes();
-                  System.out.println("GET" + bytes);
-                  outputStream.write(("$"+bytes.length+"\r\n"+map.get(key)+"\r\n").getBytes());
-                // } else {
-                  // outputStream.write("$-1\r\n".getBytes());
-                // }
-                
+                byte[] bytes = (map.get(key)).getBytes();
+                System.out.println("GET" + bytes);
+                outputStream.write(("$"+bytes.length+"\r\n"+map.get(key)+"\r\n").getBytes());
               }
 
             }
