@@ -85,11 +85,11 @@ public class Main {
           }
         } else if(line.equalsIgnoreCase("RPUSH")) {
           in.readLine();
-          // if(in.readLine().equalsIgnoreCase("list_key")) {
-            // in.readLine();
+          if(in.readLine().equalsIgnoreCase("list_key")) {
+            in.readLine();
             list_store.add(in.readLine());
             outputStream.write((":"+ list_store.size() +"\r\n").getBytes());
-          // }
+          }
         }
 
       }
