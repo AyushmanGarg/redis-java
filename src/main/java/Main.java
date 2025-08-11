@@ -88,7 +88,7 @@ public class Main {
           // if(in.readLine().equalsIgnoreCase("list_key")) {
             // in.readLine();
             list_store.add(in.readLine());
-            outputStream.write((":1"+ list_store.size() +"\r\n").getBytes());
+            outputStream.write((":"+ list_store.size() +"\r\n").getBytes());
           // }
         }
 
