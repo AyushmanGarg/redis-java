@@ -86,8 +86,10 @@ public class Main {
         } else if(line.equalsIgnoreCase("RPUSH")) {
           // in.readLine();
           // if(in.readLine().equalsIgnoreCase("list_key")) {
-          while(in.ready()) {
+          Integer a = 0;
+          while(in.ready() && a == 0) {
             in.readLine();
+            a++;
             list_store.add(in.readLine());
             outputStream.write((":"+ list_store.size() +"\r\n").getBytes());
           }
