@@ -88,10 +88,17 @@ public class Main {
           String key = in.readLine();
           in.readLine();
           if(list_Storage.containsKey(key)) {
-            list_Storage.get(key).add(in.readLine());
+            while(in.ready()) {
+              in.readLine();
+              list_Storage.get(key).add(in.readLine());
+            }
             outputStream.write((":"+ list_Storage.get(key).size() + "\r\n").getBytes());
           } else {
             list_Storage.put(key, new ArrayList<>(Arrays.asList(in.readLine())));
+            while(in.ready()) {
+              in.readLine();
+              list_Storage.get(key).add(in.readLine());
+            }
             outputStream.write((":"+ list_Storage.get(key).size() + "\r\n").getBytes());
           }
         }
