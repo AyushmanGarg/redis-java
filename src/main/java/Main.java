@@ -118,7 +118,11 @@ public class Main {
               Integer idx = strt_idx;
               Integer mx = Math.min(n, end_idx);
               Integer mn = Math.max(strt_idx, 0);
-              outputStream.write(("*" + (mx - mn+1) + "\r\n").getBytes());
+              if(n<end_idx) {
+                outputStream.write(("*" + (mx - mn) + "\r\n").getBytes());
+              } else {
+                outputStream.write(("*" + (mx - mn+1) + "\r\n").getBytes());
+              }
               while (idx < n && idx <= end_idx) {
                 System.out.println(n);
                 byte[] bytes = list_Storage.get(key).get(idx).getBytes();
