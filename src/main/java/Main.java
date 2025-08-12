@@ -121,6 +121,7 @@ public class Main {
               outputStream.write(("*" + (mx - mn) + "\r\n").getBytes());
               while (idx < n && idx <= end_idx) {
                 outputStream.write(("$" + list_Storage.get(key).get(idx) + "\r\n").getBytes());
+                outputStream.write((list_Storage.get(key).get(idx)).getBytes());
                 idx++;
               }
             }
