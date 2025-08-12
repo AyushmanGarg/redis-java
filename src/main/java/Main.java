@@ -89,8 +89,10 @@ public class Main {
           in.readLine();
           if(list_Storage.containsKey(key)) {
             list_Storage.get(key).add(in.readLine());
+            outputStream.write((":"+ list_Storage.get(key).size() + "\r\n").getBytes());
           } else {
             list_Storage.put(key, new ArrayList<>(Arrays.asList(in.readLine())));
+            outputStream.write((":"+ list_Storage.get(key).size() + "\r\n").getBytes());
           }
         }
 
