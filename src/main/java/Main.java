@@ -184,8 +184,11 @@ public class Main {
         } else if(line.equalsIgnoreCase("LLEN")) {
           in.readLine();
           String key = in.readLine();
-          // byte[] bytes = (list_Storage.get(key).size()).getBytes();
-          outputStream.write((":" + list_Storage.get(key).size() + "\r\n").getBytes());
+          if(key == null) {
+            outputStream.write(":0\r\n".getBytes());
+          } else {
+            outputStream.write((":" + list_Storage.get(key).size() + "\r\n").getBytes());
+          }
         }
       }
 
