@@ -189,6 +189,13 @@ public class Main {
           } else {
             outputStream.write((":" + list_Storage.get(key).size() + "\r\n").getBytes());
           }
+        } else if(line.equalsIgnoreCase("LPOP")) {
+          in.readLine();
+          String key = in.readLine();
+          String value = list_Storage.get(key).get(0);
+          list_Storage.get(key).remove(0);
+          byte[] bytes = (value).getBytes(); 
+          outputStream.write((":" + bytes.length + "\r\n" + value + "\r\n").getBytes());
         }
       }
 
