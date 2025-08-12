@@ -112,23 +112,53 @@ public class Main {
           Integer end_idx = Integer.valueOf(endidx);
           if (list_Storage.containsKey(key)) {
             Integer n = list_Storage.get(key).size();
-            if (strt_idx >= n || strt_idx > end_idx) {
-              outputStream.write("*0\r\n".getBytes());
-            } else {
-              Integer idx = strt_idx;
-              Integer mx = Math.min(n, end_idx);
-              Integer mn = Math.max(strt_idx, 0);
-              if(n<end_idx) {
-                outputStream.write(("*" + (mx - mn) + "\r\n").getBytes());
+            if (strt_idx < 0 || end_idx < 0) {
+              strt_idx+=n;
+              end_idx+=n;
+              strt_idx = strt_idx%n;
+              end_idx = end_idx%n;
+              Integer a = strt_idx;
+              Integer b = end_idx;
+              strt_idx = Math.min(a, b);
+              end_idx = Math.max(a, b);
+              if (strt_idx >= n || strt_idx > end_idx) {
+                outputStream.write("*0\r\n".getBytes());
               } else {
-                outputStream.write(("*" + (mx - mn+1) + "\r\n").getBytes());
+                Integer idx = strt_idx;
+                Integer mx = Math.min(n, end_idx);
+                Integer mn = Math.max(strt_idx, 0);
+                if (n < end_idx) {
+                  outputStream.write(("*" + (mx - mn) + "\r\n").getBytes());
+                } else {
+                  outputStream.write(("*" + (mx - mn + 1) + "\r\n").getBytes());
+                }
+                while (idx < n && idx <= end_idx) {
+                  System.out.println(n);
+                  byte[] bytes = list_Storage.get(key).get(idx).getBytes();
+                  outputStream.write(("$" + bytes.length + "\r\n").getBytes());
+                  outputStream.write((list_Storage.get(key).get(idx) + "\r\n").getBytes());
+                  idx++;
+                }
               }
-              while (idx < n && idx <= end_idx) {
-                System.out.println(n);
-                byte[] bytes = list_Storage.get(key).get(idx).getBytes();
-                outputStream.write(("$" + bytes.length + "\r\n").getBytes());
-                outputStream.write((list_Storage.get(key).get(idx)+"\r\n").getBytes());
-                idx++;
+            } else {
+              if (strt_idx >= n || strt_idx > end_idx) {
+                outputStream.write("*0\r\n".getBytes());
+              } else {
+                Integer idx = strt_idx;
+                Integer mx = Math.min(n, end_idx);
+                Integer mn = Math.max(strt_idx, 0);
+                if (n < end_idx) {
+                  outputStream.write(("*" + (mx - mn) + "\r\n").getBytes());
+                } else {
+                  outputStream.write(("*" + (mx - mn + 1) + "\r\n").getBytes());
+                }
+                while (idx < n && idx <= end_idx) {
+                  System.out.println(n);
+                  byte[] bytes = list_Storage.get(key).get(idx).getBytes();
+                  outputStream.write(("$" + bytes.length + "\r\n").getBytes());
+                  outputStream.write((list_Storage.get(key).get(idx) + "\r\n").getBytes());
+                  idx++;
+                }
               }
             }
           } else {
