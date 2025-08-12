@@ -172,11 +172,11 @@ public class Main {
           }
           Collections.reverse(reverse_list);
           if (list_Storage.containsKey(key)) {
-            list_Storage.get(key).addAll(reverse_list);
+            list_Storage.get(key).addAll(0, reverse_list);
             outputStream.write((":" + list_Storage.get(key).size() + "\r\n").getBytes());
           } else {
             list_Storage.put(key, new ArrayList<>());
-            list_Storage.get(key).addAll(reverse_list);
+            list_Storage.get(key).addAll(0, reverse_list);
             outputStream.write((":" + list_Storage.get(key).size() + "\r\n").getBytes());
           }
         }
