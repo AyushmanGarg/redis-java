@@ -94,8 +94,10 @@ public class Main {
             }
             outputStream.write((":"+ list_Storage.get(key).size() + "\r\n").getBytes());
           } else {
+            System.out.println(in.ready()+ "1");
             in.readLine();
             list_Storage.put(key, new ArrayList<>(Arrays.asList(in.readLine())));
+            System.out.println(in.ready() + "2");
             while(in.ready()) {
               in.readLine();
               list_Storage.get(key).add(in.readLine());
