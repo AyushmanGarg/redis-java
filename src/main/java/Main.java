@@ -122,7 +122,7 @@ public class Main {
               while (idx < n && idx <= end_idx) {
                 byte[] bytes = list_Storage.get(key).get(idx).getBytes();
                 outputStream.write(("$" + bytes.length + "\r\n").getBytes());
-                outputStream.write((list_Storage.get(key).get(idx)).getBytes());
+                outputStream.write((list_Storage.get(key).get(idx)+"\r\n").getBytes());
                 idx++;
               }
             }
