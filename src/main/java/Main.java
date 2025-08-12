@@ -133,7 +133,6 @@ public class Main {
                   outputStream.write(("*" + (mx - mn + 1) + "\r\n").getBytes());
                 }
                 while (idx < n && idx <= end_idx) {
-                  System.out.println(n);
                   byte[] bytes = list_Storage.get(key).get(idx).getBytes();
                   outputStream.write(("$" + bytes.length + "\r\n").getBytes());
                   outputStream.write((list_Storage.get(key).get(idx) + "\r\n").getBytes());
@@ -153,7 +152,6 @@ public class Main {
                   outputStream.write(("*" + (mx - mn + 1) + "\r\n").getBytes());
                 }
                 while (idx < n && idx <= end_idx) {
-                  System.out.println(n);
                   byte[] bytes = list_Storage.get(key).get(idx).getBytes();
                   outputStream.write(("$" + bytes.length + "\r\n").getBytes());
                   outputStream.write((list_Storage.get(key).get(idx) + "\r\n").getBytes());
@@ -192,12 +190,25 @@ public class Main {
         } else if(line.equalsIgnoreCase("LPOP")) {
           in.readLine();
           String key = in.readLine();
-          String value = list_Storage.get(key).get(0);
-          list_Storage.get(key).remove(0);
-          byte[] bytes = (value).getBytes();
-          System.out.println(":" + bytes.length + "\r\n" + value + "\r\n");
-          outputStream.write(("$" + bytes.length + "\r\n" + value + "\r\n").getBytes());
-        }
+          if(in.ready()) {
+            in.readLine();
+            String num = in.readLine();
+            Integer nums = Integer.valueOf(num);
+            outputStream.write(("*" + (nums) + "\r\n").getBytes());
+            while(list_Storage.size()>0 && nums>0) {
+              String value = list_Storage.get(key).get(0);
+              list_Storage.get(key).remove(0);
+              byte[] bytes = (value).getBytes();
+              outputStream.write(("$" + bytes.length + "\r\n" + value + "\r\n").getBytes());
+              nums--;
+            }
+          } else {
+            String value = list_Storage.get(key).get(0);
+            list_Storage.get(key).remove(0);
+            byte[] bytes = (value).getBytes();
+            outputStream.write(("$" + bytes.length + "\r\n" + value + "\r\n").getBytes());
+          }
+        } 
       }
 
     } catch (Exception e) {
