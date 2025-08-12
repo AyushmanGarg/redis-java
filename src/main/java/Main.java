@@ -86,7 +86,7 @@ public class Main {
         } else if(line.equalsIgnoreCase("RPUSH")) {
           in.readLine();
           String key = in.readLine();
-          in.readLine();
+          // in.readLine();
           if(list_Storage.containsKey(key)) {
             while(in.ready()) {
               in.readLine();
