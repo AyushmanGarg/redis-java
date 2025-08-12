@@ -162,6 +162,23 @@ public class Main {
           } else {
             outputStream.write("*0\r\n".getBytes());
           }
+        } else if(line.equalsIgnoreCase("LPUSH")) {
+          in.readLine();
+          String key = in.readLine();
+          List<String> reverse_list  = new ArrayList<>();
+          while (in.ready()) {
+            in.readLine();
+            reverse_list.add(in.readLine());
+          }
+          Collections.reverse(reverse_list);
+          if (list_Storage.containsKey(key)) {
+            list_Storage.get(key).addAll(reverse_list);
+            outputStream.write((":" + list_Storage.get(key).size() + "\r\n").getBytes());
+          } else {
+            list_Storage.put(key, new ArrayList<>());
+            list_Storage.get(key).addAll(reverse_list);
+            outputStream.write((":" + list_Storage.get(key).size() + "\r\n").getBytes());
+          }
         }
 
       }
