@@ -113,12 +113,14 @@ public class Main {
           if (list_Storage.containsKey(key)) {
             Integer n = list_Storage.get(key).size();
             if (strt_idx < 0 || end_idx < 0) {
-              if(strt_idx<= -1*n) strt_idx = 0;
-              if(end_idx<= -1*n) end_idx = 0;
-              strt_idx+=n;
-              end_idx+=n;
-              strt_idx = strt_idx%n;
-              end_idx = end_idx%n;
+              if (strt_idx <= -1 * n)
+                strt_idx = 0;
+              if (end_idx <= -1 * n)
+                end_idx = 0;
+              strt_idx += n;
+              end_idx += n;
+              strt_idx = strt_idx % n;
+              end_idx = end_idx % n;
               if (strt_idx >= n || strt_idx > end_idx) {
                 outputStream.write("*0\r\n".getBytes());
               } else {
@@ -162,10 +164,10 @@ public class Main {
           } else {
             outputStream.write("*0\r\n".getBytes());
           }
-        } else if(line.equalsIgnoreCase("LPUSH")) {
+        } else if (line.equalsIgnoreCase("LPUSH")) {
           in.readLine();
           String key = in.readLine();
-          List<String> reverse_list  = new ArrayList<>();
+          List<String> reverse_list = new ArrayList<>();
           while (in.ready()) {
             in.readLine();
             reverse_list.add(in.readLine());
@@ -179,6 +181,11 @@ public class Main {
             list_Storage.get(key).addAll(0, reverse_list);
             outputStream.write((":" + list_Storage.get(key).size() + "\r\n").getBytes());
           }
+        } else if(line.equalsIgnoreCase("LLEN")) {
+          in.readLine();
+          String key = in.readLine();
+          // byte[] bytes = (list_Storage.get(key).size()).getBytes();
+          outputStream.write((":" + list_Storage.get(key).size() + "\r\n").getBytes());
         }
       }
 
