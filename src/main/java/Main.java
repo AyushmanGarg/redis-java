@@ -6,7 +6,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class Main {
   public static void main(String[] args) {
@@ -35,7 +35,7 @@ public class Main {
             new InputStreamReader(clientSocket.getInputStream()))) {
       HashMap<String, String> map = new HashMap<>();
       HashMap<String, Long> expiry_map = new HashMap<>();
-      HashMap<String, List<String>> listStore = new HashMap<>();
+      HashMap<String, List<String>> list_Storage = new HashMap<>();
       while (true) {
         if (in.readLine() == null) {
           break;
@@ -84,30 +84,14 @@ public class Main {
             outputStream.write("$-1\r\n".getBytes());
           }
         } else if(line.equalsIgnoreCase("RPUSH")) {
-          in.readLine();                    // $<len> for key
-          String key = in.readLine();       // key
-          List<String> list = listStore.computeIfAbsent(key, k -> new ArrayList<>());
-
-          // Read remaining bulk strings as values
-          while (true) {
-            String lenLine = in.readLine(); // e.g. $5
-            if (lenLine == null || !lenLine.startsWith("$")) break;
-            String value = in.readLine();   // e.g. mango
-            list.add(value);
+          in.readLine();
+          String key = in.readLine();
+          in.readLine();
+          if(list_Storage.containsKey(key)) {
+            list_Storage.get(key).add(in.readLine());
+          } else {
+            list_Storage.put(key, new ArrayList<>(Arrays.asList(in.readLine())));
           }
-
-          outputStream.write((":" + list.size() + "\r\n").getBytes());
-          outputStream.flush();
-          // in.readLine();
-          // if(in.readLine().equalsIgnoreCase("list_key")) {
-          // Integer a = 0;
-          // while(in.ready() && a == 0) {
-          //   in.readLine();
-          //   a++;
-          //   list_store.add(in.readLine());
-          //   outputStream.write((":"+ list_store.size() +"\r\n").getBytes());
-          // }
-          // }
         }
 
       }
