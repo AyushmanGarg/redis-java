@@ -101,7 +101,7 @@ public class Main {
             }
             outputStream.write((":" + list_Storage.get(key).size() + "\r\n").getBytes());
           }
-        } else if (in.readLine().equalsIgnoreCase("LRANGE")) {
+        } else if (line.equalsIgnoreCase("LRANGE")) {
           in.readLine();
           String key = in.readLine();
           in.readLine();
