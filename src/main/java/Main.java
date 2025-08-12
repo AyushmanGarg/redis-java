@@ -83,26 +83,49 @@ public class Main {
           } else {
             outputStream.write("$-1\r\n".getBytes());
           }
-        } else if(line.equalsIgnoreCase("RPUSH")) {
+        } else if (line.equalsIgnoreCase("RPUSH")) {
           in.readLine();
           String key = in.readLine();
-          // in.readLine();
-          if(list_Storage.containsKey(key)) {
-            while(in.ready()) {
+          if (list_Storage.containsKey(key)) {
+            while (in.ready()) {
               in.readLine();
               list_Storage.get(key).add(in.readLine());
             }
-            outputStream.write((":"+ list_Storage.get(key).size() + "\r\n").getBytes());
+            outputStream.write((":" + list_Storage.get(key).size() + "\r\n").getBytes());
           } else {
-            System.out.println(in.ready()+ "1");
             in.readLine();
             list_Storage.put(key, new ArrayList<>(Arrays.asList(in.readLine())));
-            System.out.println(in.ready() + "2");
-            while(in.ready()) {
+            while (in.ready()) {
               in.readLine();
               list_Storage.get(key).add(in.readLine());
             }
-            outputStream.write((":"+ list_Storage.get(key).size() + "\r\n").getBytes());
+            outputStream.write((":" + list_Storage.get(key).size() + "\r\n").getBytes());
+          }
+        } else if (in.readLine().equalsIgnoreCase("LRANGE")) {
+          in.readLine();
+          String key = in.readLine();
+          in.readLine();
+          String strtidx = in.readLine();
+          Integer strt_idx = Integer.valueOf(strtidx);
+          in.readLine();
+          String endidx = in.readLine();
+          Integer end_idx = Integer.valueOf(endidx);
+          if (list_Storage.containsKey(key)) {
+            Integer n = list_Storage.get(key).size();
+            if (strt_idx >= n || strt_idx > end_idx) {
+              outputStream.write("*0\r\n".getBytes());
+            } else {
+              Integer idx = strt_idx;
+              Integer mn = Math.min(n, end_idx);
+              Integer mx = Math.max(strt_idx, 0);
+              outputStream.write(("*" + (mx - mn) + "\r\n").getBytes());
+              while (idx < n && idx <= end_idx) {
+                outputStream.write(("$" + list_Storage.get(key).get(idx) + "\r\n").getBytes());
+                idx++;
+              }
+            }
+          } else {
+            outputStream.write("*0\r\n".getBytes());
           }
         }
 
