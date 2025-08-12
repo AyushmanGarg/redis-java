@@ -196,7 +196,7 @@ public class Main {
           list_Storage.get(key).remove(0);
           byte[] bytes = (value).getBytes();
           System.out.println(":" + bytes.length + "\r\n" + value + "\r\n");
-          outputStream.write((":" + bytes.length + "\r\n" + value + "\r\n").getBytes());
+          outputStream.write(("$" + bytes.length + "\r\n" + value + "\r\n").getBytes());
         }
       }
 
