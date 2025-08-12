@@ -180,7 +180,6 @@ public class Main {
             outputStream.write((":" + list_Storage.get(key).size() + "\r\n").getBytes());
           }
         }
-
       }
 
     } catch (Exception e) {
