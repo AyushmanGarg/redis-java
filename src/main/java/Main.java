@@ -120,7 +120,8 @@ public class Main {
               Integer mn = Math.min(strt_idx, 0);
               outputStream.write(("*" + (mx - mn) + "\r\n").getBytes());
               while (idx < n && idx <= end_idx) {
-                outputStream.write(("$" + list_Storage.get(key).get(idx) + "\r\n").getBytes());
+                byte[] bytes = list_Storage.get(key).get(idx).getBytes();
+                outputStream.write(("$" + bytes.length + "\r\n").getBytes());
                 outputStream.write((list_Storage.get(key).get(idx)).getBytes());
                 idx++;
               }
