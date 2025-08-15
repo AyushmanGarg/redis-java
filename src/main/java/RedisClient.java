@@ -1,63 +1,60 @@
-public class Main {
-  public static void main(String[] args) {
-      int port = 6379; // Default Redis port
-      RedisServer redisServer = new RedisServer(port);
-      redisServer.start();
-  }
+import java.net.Socket;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+
+public class RedisClient implements Runnable {
+    private final Socket clientSocket;
+    public RedisClient(Socket clientSocket) {
+        this.clientSocket = clientSocket;
+    }
+
+    public void handleClientCommands(OutputStream outputStream, BufferedReader inputStream, RedisClientCommandHandler cmdHandler) {
+        try {
+            inputStream.readLine();
+            String cmd = inputStream.readLine();
+            if(cmd.equalsIgnoreCase("PING")) cmdHandler.handlePING();
+            else if (cmd.equalsIgnoreCase("echo")) cmdHandler.handleECHO();;
+        } catch (Exception e) {
+            System.out.println("IOException: " + e.getMessage());
+        }
+    }
+
+    public void handleClient() {
+        try (clientSocket;
+            OutputStream outputStream = clientSocket.getOutputStream();
+            BufferedReader inputStream = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()))){
+                RedisClientCommandHandler cmdHandler = new RedisClientCommandHandler(outputStream, inputStream);
+                while (true) {
+                    // closes connection when client is disconnected
+                    // if (inputStream.readLine() == null) {
+                    //     break; 
+                    // }
+                    handleClientCommands(outputStream, inputStream, cmdHandler);
+                }
+        } catch (Exception e) {
+            System.out.println("IOException: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void run() {
+        handleClient();
+    }
 }
 
 
-// import java.io.IOException;
-// import java.net.ServerSocket;
-// import java.net.Socket;
-// import java.io.BufferedReader;
-// import java.io.InputStreamReader;
-// import java.io.OutputStream;
-// import java.util.HashMap;
-// import java.util.ArrayList;
-// import java.util.*;
-// public class Main {
-//   public static void main(String[] args) {
-//     ServerSocket serverSocket = null;
-//     int port = 6379;
 
-//     try {
-//       serverSocket = new ServerSocket(port);
-//       serverSocket.setReuseAddress(true);
-//       while (true) {
-//         Socket clientSocket = serverSocket.accept();
-//         System.out.println("New client connected");
-//         new Thread(() -> handleClient(clientSocket))
-//             .start();
-//       }
-//     } catch (IOException e) {
-//       System.out.println("IOException: " + e.getMessage());
-//       System.exit(-1);
-//     }
-//   }
 
-//   public static void handleClient(Socket clientSocket) {
-//     try (clientSocket;
-//         OutputStream outputStream = clientSocket.getOutputStream();
-//         BufferedReader in = new BufferedReader(
-//             new InputStreamReader(clientSocket.getInputStream()))) {
+
+
+
 //       HashMap<String, String> map = new HashMap<>();
 //       HashMap<String, Long> expiry_map = new HashMap<>();
 //       HashMap<String, List<String>> list_Storage = new HashMap<>();
 //       while (true) {
-//         if (in.readLine() == null) {
-//           break;
-//         }
-//         in.readLine();
-//         String line = in.readLine();
-//         if (line.equalsIgnoreCase("ping")) {
-//           outputStream.write("+PONG\r\n".getBytes());
-//           outputStream.flush();
-//         } else if (line.equalsIgnoreCase("echo")) {
-//           in.readLine();
-//           outputStream.write(("+" + in.readLine() + "\r\n").getBytes());
-//           outputStream.flush();
-//         } else if (line.equalsIgnoreCase("SET")) {
+//         
+//          else if (line.equalsIgnoreCase("SET")) {
 //           in.readLine();
 //           String key = in.readLine();
 //           in.readLine();
