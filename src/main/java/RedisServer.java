@@ -13,7 +13,7 @@ public class RedisServer {
     // Value container that can hold either a string or a list, plus optional expiry
     private static class RedisValue {
         String stringValue;       // for SET/GET
-        List<String> listValue;   // for RPUSH / LPUSH / LRANGE / LPOP / BLPOP
+        List<String> listValue;   // for RPUSH / LPUSH / LRANGE / LPOP
         Long expiry;              // null if no expiry (timestamp in ms)
 
         RedisValue(String s, Long expiry) {
@@ -31,9 +31,6 @@ public class RedisServer {
     }
 
     private Map<String, RedisValue> store = new HashMap<>();
-
-    // Map of listKey -> queue of SelectionKeys waiting on that list (FIFO)
-    private final Map<String, Deque<SelectionKey>> blocked = new HashMap<>();
 
     public RedisServer(int port) {
         try {
@@ -71,7 +68,6 @@ public class RedisServer {
             int bytesRead = client.read(buffer);
             if (bytesRead == -1) {
                 RedisClients.remove(client);
-                key.cancel();
                 client.close();
                 return;
             }
@@ -90,12 +86,7 @@ public class RedisServer {
                     if (command == null)
                         break; // not enough data yet
 
-                    // Pass the selection key so executeCommand can block this client if needed
-                    String reply = executeCommand(command, key);
-
-                    // If executeCommand returned null, the client got blocked (BLPOP) — stop processing
-                    if (reply == null) break;
-
+                    String reply = executeCommand(command);
                     ByteBuffer response = ByteBuffer.wrap(reply.getBytes(StandardCharsets.UTF_8));
                     while (response.hasRemaining()) {
                         client.write(response);
@@ -108,7 +99,6 @@ public class RedisServer {
             } catch (IOException ignored) {
             }
             RedisClients.remove(client);
-            key.cancel();
             System.err.println("Redis Server read error: " + e.getMessage());
         }
     }
@@ -127,7 +117,7 @@ public class RedisServer {
             try {
                 numElements = Integer.parseInt(sb.substring(1, lineEnd));
             } catch (NumberFormatException e) {
-                return null; // malformed header
+                return null; // malformed header; caller may choose to handle differently
             }
 
             List<String> parts = new ArrayList<>();
@@ -178,8 +168,8 @@ public class RedisServer {
         }
     }
 
-    // Execute supported commands. Returns the reply string, or null if the client was blocked (BLPOP).
-    private String executeCommand(List<String> cmd, SelectionKey currentKey) {
+    // Execute supported commands
+    private String executeCommand(List<String> cmd) {
         if (cmd.isEmpty())
             return "-ERR empty command\r\n";
 
@@ -251,67 +241,30 @@ public class RedisServer {
                     values.add(cmd.get(i));
                 }
 
-                // First, try to satisfy blocked clients waiting on this list (FIFO)
-                Deque<SelectionKey> waiters = blocked.get(key);
-                int idx = 0;
-                while (waiters != null && !waiters.isEmpty() && idx < values.size()) {
-                    SelectionKey waiterKey = waiters.pollFirst();
-                    if (waiterKey != null) {
-                        String val = values.get(idx++);
-                        // respond to waiter: ["key", "val"]
-                        StringBuilder out = new StringBuilder();
-                        out.append("*2\r\n");
-                        out.append("$").append(key.length()).append("\r\n");
-                        out.append(key).append("\r\n");
-                        out.append("$").append(val.length()).append("\r\n");
-                        out.append(val).append("\r\n");
-                        // write response to waiter
-                        try {
-                            SocketChannel sc = (SocketChannel) waiterKey.channel();
-                            ByteBuffer resp = ByteBuffer.wrap(out.toString().getBytes(StandardCharsets.UTF_8));
-                            while (resp.hasRemaining()) sc.write(resp);
-                            // re-enable read interest for that client
-                            waiterKey.interestOps(SelectionKey.OP_READ);
-                        } catch (IOException e) {
-                            try { waiterKey.channel().close(); } catch (IOException ignored) {}
-                            waiterKey.cancel();
-                            RedisClients.remove(waiterKey.channel());
-                        }
-                    }
+                RedisValue rv = store.get(key);
+
+                if (rv == null) {
+                    // create new list
+                    List<String> list = new ArrayList<>(values);
+                    store.put(key, new RedisValue(list, null));
+                    return ":" + list.size() + "\r\n";
                 }
 
-                // If there are leftover values (not consumed by blocked clients), append them to the list
-                if (idx < values.size()) {
-                    List<String> toAppend = values.subList(idx, values.size());
-                    RedisValue rv = store.get(key);
-                    if (rv == null) {
-                        List<String> list = new ArrayList<>(toAppend);
-                        store.put(key, new RedisValue(list, null));
-                        return ":" + list.size() + "\r\n";
-                    }
-
-                    // check expiry before using
-                    if (rv.expiry != null && System.currentTimeMillis() > rv.expiry) {
-                        // expired, treat as non-existing
-                        store.remove(key);
-                        List<String> list = new ArrayList<>(toAppend);
-                        store.put(key, new RedisValue(list, null));
-                        return ":" + list.size() + "\r\n";
-                    }
-
-                    if (!rv.isList()) {
-                        return "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n";
-                    }
-
-                    rv.listValue.addAll(toAppend);
-                    return ":" + rv.listValue.size() + "\r\n";
-                } else {
-                    // All values were consumed by blocked clients. The list size after the operation:
-                    // If list exists, its size did not change; if not existed, size is 0.
-                    RedisValue rv = store.get(key);
-                    int size = (rv != null && rv.isList()) ? rv.listValue.size() : 0;
-                    return ":" + size + "\r\n";
+                // check expiry before using
+                if (rv.expiry != null && System.currentTimeMillis() > rv.expiry) {
+                    // expired, treat as non-existing
+                    store.remove(key);
+                    List<String> list = new ArrayList<>(values);
+                    store.put(key, new RedisValue(list, null));
+                    return ":" + list.size() + "\r\n";
                 }
+
+                if (!rv.isList()) {
+                    return "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n";
+                }
+
+                rv.listValue.addAll(values);
+                return ":" + rv.listValue.size() + "\r\n";
             }
 
             case "LPUSH": {
@@ -429,52 +382,9 @@ public class RedisServer {
                 } else {
                     // single element -> return bulk string
                     String v = list.remove(0);
+                    // if list becomes empty you may keep empty list or remove key; we keep empty list
                     return "$" + v.length() + "\r\n" + v + "\r\n";
                 }
-            }
-
-            case "BLPOP": {
-                // BLPOP key timeout (timeout is seconds). In tests timeout always 0 (block indefinitely)
-                if (cmd.size() < 3) return "-ERR wrong number of arguments for 'BLPOP'\r\n";
-                String key = cmd.get(1);
-                // int timeout = 0; // we ignore non-zero for now; tests use 0
-                // try parsing but ignore value
-                try {
-                    Integer.parseInt(cmd.get(2));
-                } catch (NumberFormatException e) {
-                    return "-ERR value is not an integer or out of range\r\n";
-                }
-
-                RedisValue rv = store.get(key);
-                // if list exists and has elements -> behave like LPOP and return immediately as array [key, value]
-                if (rv != null) {
-                    // expiry check
-                    if (rv.expiry != null && System.currentTimeMillis() > rv.expiry) {
-                        store.remove(key);
-                        rv = null;
-                    }
-                }
-
-                if (rv != null && rv.isList() && !rv.listValue.isEmpty()) {
-                    String val = rv.listValue.remove(0);
-                    StringBuilder out = new StringBuilder();
-                    out.append("*2\r\n");
-                    out.append("$").append(key.length()).append("\r\n");
-                    out.append(key).append("\r\n");
-                    out.append("$").append(val.length()).append("\r\n");
-                    out.append(val).append("\r\n");
-                    return out.toString();
-                }
-
-                // Otherwise, no element now -> block this client indefinitely (tests use timeout 0)
-                Deque<SelectionKey> waiters = blocked.computeIfAbsent(key, k -> new ArrayDeque<>());
-                waiters.addLast(currentKey);
-
-                // disable read interest for this key so we don't try to read more from a blocked client
-                currentKey.interestOps(0);
-
-                // return null to indicate no immediate response (client is blocked)
-                return null;
             }
 
             case "LRANGE": {
@@ -557,8 +467,6 @@ public class RedisServer {
             System.err.println("Redis Server Start error: " + e.getMessage());
         }
     }
-
-    // main omitted — keep your existing launcher
 }
 
 
