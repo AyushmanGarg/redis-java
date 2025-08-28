@@ -514,4 +514,14 @@ public class RedisClientCommandHandler {
         return out.toString();
     }
 
+    public String handleTYPE(List<String> cmd) {
+        if(cmd.size()<2)
+            return "-ERR wrong number of arguments for 'TYPE'\r\n";
+
+        String key = cmd.get(1);
+        if(store.containsKey(key)) 
+            return "+string\r\n";
+
+        return "+none\r\n";
+    }
 }

@@ -110,6 +110,8 @@ public class RedisClientHandler {
 
             case "LRANGE":
                 return cmdHandler.handleLRANGE(cmd);
+            case "TYPE":
+                return cmdHandler.handleTYPE(cmd);
 
             default:
                 return "-ERR unknown command '" + cmd.get(0) + "'\r\n";

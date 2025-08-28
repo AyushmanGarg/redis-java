@@ -63,3 +63,4 @@ public class RedisServer {
 // why flip not needed in stringbuilder
 // understand switch and case
 // in BLPOP how is selector sending logs to correct client is it via key?
+//  for type command in redisva;lue a key can only have a string or a list?
