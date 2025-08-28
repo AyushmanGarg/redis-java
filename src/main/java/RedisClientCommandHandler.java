@@ -555,27 +555,18 @@ public class RedisClientCommandHandler {
 
         String stream_key = cmd.get(1);
         String entry_id = cmd.get(2);
-        
-        // Handle auto-generation of IDs first
         if (entry_id.contains("*")) {
             entry_id = generateStreamId(stream_key, entry_id);
         }
-        
-        // Now validate the generated ID
         if (entry_id.equals("0-0")) {
             return "-ERR The ID specified in XADD must be greater than 0-0\r\n";
         }
-
-        // Build field-value map from command args
         Map<String, String> fields = new HashMap<>();
         for (int i = 3; i < cmd.size(); i += 2) {
             String field = cmd.get(i);
             String value = cmd.get(i + 1);
             fields.put(field, value);
         }
-
-
-        // If stream already exists
         if (store.containsKey(stream_key)) {
             RedisValue rv = store.get(stream_key);
             if (rv.streamStore == null) {
@@ -630,14 +621,11 @@ public class RedisClientCommandHandler {
         long sequence = 0;
         
         if (parts[0].equals("*")) {
-            // *-* format: generate both timestamp and sequence
             timestamp = System.currentTimeMillis();
         } else {
-            // 123-* format: use provided timestamp, generate sequence
             timestamp = Long.parseLong(parts[0]);
         }
         
-        // If stream exists, find the next available sequence
         if (store.containsKey(stream_key)) {
             RedisValue rv = store.get(stream_key);
             if (rv.streamStore != null && !rv.streamStore.isEmpty()) {
