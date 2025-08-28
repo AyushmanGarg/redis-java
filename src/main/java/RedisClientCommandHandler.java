@@ -561,7 +561,7 @@ public class RedisClientCommandHandler {
         if (entry_id.equals("0-0")) {
             return "-ERR The ID specified in XADD must be greater than 0-0\r\n";
         }
-        Map<String, String> fields = new HashMap<>();
+        Map<String, String> fields = new LinkedHashMap<>();
         for (int i = 3; i < cmd.size(); i += 2) {
             String field = cmd.get(i);
             String value = cmd.get(i + 1);
@@ -572,22 +572,22 @@ public class RedisClientCommandHandler {
             if (rv.streamStore == null) {
                 rv.streamStore = new TreeMap<>(new StreamIdComparator());
             }
-            
+
             String last_id = rv.streamStore.isEmpty() ? "0-0" : rv.streamStore.lastKey();
             StreamIdComparator comparator = new StreamIdComparator();
-            
+
             int cmp = comparator.compare(entry_id, last_id);
             if (cmp <= 0) {
                 return "-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n";
             }
-            
+
             rv.streamStore.put(entry_id, fields);
             return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
         } else {
             // First entry for a new stream
             TreeMap<String, Map<String, String>> stream = new TreeMap<>(new StreamIdComparator());
             stream.put(entry_id, fields);
-            
+
             RedisValue streamValue = new RedisValue(stream);
             store.put(stream_key, streamValue);
             return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
@@ -609,23 +609,21 @@ public class RedisClientCommandHandler {
             if (time1 != time2) {
                 return Long.compare(time1, time2);
             }
-            if (parts1[1] != "*")
-                return Long.compare(seq1, seq2);
-            return 100;
+            return Long.compare(seq1, seq2);
         }
     }
-    
+
     private String generateStreamId(String stream_key, String partial_id) {
         String[] parts = partial_id.split("-");
         long timestamp;
         long sequence = 0;
-        
+
         if (parts[0].equals("*")) {
             timestamp = System.currentTimeMillis();
         } else {
             timestamp = Long.parseLong(parts[0]);
         }
-        
+
         if (store.containsKey(stream_key)) {
             RedisValue rv = store.get(stream_key);
             if (rv.streamStore != null && !rv.streamStore.isEmpty()) {
@@ -633,7 +631,7 @@ public class RedisClientCommandHandler {
                 String[] last_parts = last_id.split("-");
                 long last_timestamp = Long.parseLong(last_parts[0]);
                 long last_sequence = Long.parseLong(last_parts[1]);
-                
+
                 if (timestamp <= last_timestamp) {
                     timestamp = last_timestamp;
                     sequence = last_sequence + 1;
@@ -642,12 +640,91 @@ public class RedisClientCommandHandler {
                 }
             }
         }
-    
+
         if (timestamp == 0 && !store.containsKey(stream_key)) {
             sequence = 1;
         }
-        
+
         return timestamp + "-" + sequence;
+    }
+
+    private String normalizeRangeId(String id, boolean isStart) {
+        if (id == null) return null;
+        if (id.contains("-")) {
+            // ensure both parts exist
+            String[] p = id.split("-");
+            if (p.length == 1 || p[1].isEmpty()) {
+                return id + (isStart ? "-0" : "-" + Long.toString(Long.MAX_VALUE));
+            }
+            return id;
+        } else {
+            return isStart ? (id + "-0") : (id + "-" + Long.toString(Long.MAX_VALUE));
+        }
+    }
+
+    public String handleXRANGE(List<String> cmd) {
+        // XRANGE key start end
+        if (cmd.size() < 4)
+            return "-ERR wrong number of arguments for 'XRANGE'\r\n";
+
+        String stream_key = cmd.get(1);
+        String start_id_raw = cmd.get(2);
+        String end_id_raw = cmd.get(3);
+
+        String start_id = normalizeRangeId(start_id_raw, true);
+        String end_id = normalizeRangeId(end_id_raw, false);
+
+        RedisValue rv = store.get(stream_key);
+        if (rv == null)
+            return "*0\r\n";
+
+        if (!rv.isStream()) {
+            return "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n";
+        }
+
+        if (rv.streamStore == null || rv.streamStore.isEmpty())
+            return "*0\r\n";
+
+        // get submap inclusive
+        SortedMap<String, Map<String, String>> range;
+        try {
+            range = rv.streamStore.subMap(start_id, true, end_id, true);
+        } catch (IllegalArgumentException e) {
+            // if comparator or ids are malformed, return empty
+            return "*0\r\n";
+        }
+
+        if (range.isEmpty())
+            return "*0\r\n";
+
+        StringBuilder out = new StringBuilder();
+        out.append("*").append(range.size()).append("\r\n");
+
+        for (Map.Entry<String, Map<String, String>> entry : range.entrySet()) {
+            String entryId = entry.getKey();
+            Map<String, String> fields = entry.getValue();
+
+            // inner array with two items: id, and an array of key/value strings
+            out.append("*2\r\n");
+
+            // id bulk string
+            out.append("$").append(entryId.length()).append("\r\n");
+            out.append(entryId).append("\r\n");
+
+            // fields array
+            int kvCount = fields.size() * 2;
+            out.append("*").append(kvCount).append("\r\n");
+            for (Map.Entry<String, String> kv : fields.entrySet()) {
+                String f = kv.getKey();
+                String v = kv.getValue();
+                out.append("$").append(f.length()).append("\r\n");
+                out.append(f).append("\r\n");
+                out.append("$").append(v.length()).append("\r\n");
+                out.append(v).append("\r\n");
+            }
+        }
+
+        return out.toString();
     }
 
 }

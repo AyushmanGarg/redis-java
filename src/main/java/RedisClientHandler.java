@@ -116,6 +116,9 @@ public class RedisClientHandler {
             
             case "XADD":
                 return cmdHandler.handleXADD(cmd);
+            
+            case "XRANGE":
+                return cmdHandler.handleXRANGE(cmd);
 
             default:
                 return "-ERR unknown command '" + cmd.get(0) + "'\r\n";
