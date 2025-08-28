@@ -650,11 +650,21 @@ public class RedisClientCommandHandler {
 
     private String normalizeRangeId(String id, boolean isStart) {
         if (id == null) return null;
+        id = id.trim();
+        if (id.equals("-")) {
+            // beginning of stream
+            return "0-0";
+        }
+        if (id.equals("+")) {
+            // end of stream
+            return Long.toString(Long.MAX_VALUE) + "-" + Long.toString(Long.MAX_VALUE);
+        }
         if (id.contains("-")) {
-            // ensure both parts exist
-            String[] p = id.split("-");
-            if (p.length == 1 || p[1].isEmpty()) {
-                return id + (isStart ? "-0" : "-" + Long.toString(Long.MAX_VALUE));
+            String[] p = id.split("-", 2);
+            String left = p.length > 0 ? p[0] : "";
+            String right = p.length > 1 ? p[1] : "";
+            if (right == null || right.isEmpty()) {
+                return isStart ? (left + "-0") : (left + "-" + Long.toString(Long.MAX_VALUE));
             }
             return id;
         } else {
