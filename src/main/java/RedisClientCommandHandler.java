@@ -7,6 +7,7 @@ import java.io.IOException;
 public class RedisClientCommandHandler {
     private Map<String, RedisValue> store;
     public Set<SocketChannel> RedisClients;
+
     private static class BlockedWaiter {
         final SelectionKey key;
         final Long deadlineMs; // null means block indefinitely
@@ -169,7 +170,8 @@ public class RedisClientCommandHandler {
             Deque<BlockedWaiter> waiters = blocked.get(key);
             while (waiters != null && !waiters.isEmpty() && !list.isEmpty()) {
                 BlockedWaiter blockedWaiter = waiters.pollFirst();
-                if (blockedWaiter == null) break;
+                if (blockedWaiter == null)
+                    break;
                 String served = list.remove(0);
                 respondToWaiter(blockedWaiter.key, key, served);
             }
@@ -185,7 +187,8 @@ public class RedisClientCommandHandler {
             Deque<BlockedWaiter> waiters = blocked.get(key);
             while (waiters != null && !waiters.isEmpty() && !list.isEmpty()) {
                 BlockedWaiter blockedWaiter = waiters.pollFirst();
-                if (blockedWaiter == null) break;
+                if (blockedWaiter == null)
+                    break;
                 String served = list.remove(0);
                 respondToWaiter(blockedWaiter.key, key, served);
             }
@@ -204,7 +207,8 @@ public class RedisClientCommandHandler {
         Deque<BlockedWaiter> waiters = blocked.get(key);
         while (waiters != null && !waiters.isEmpty() && !rv.listValue.isEmpty()) {
             BlockedWaiter blockedWaiter = waiters.pollFirst();
-            if (blockedWaiter == null) break;
+            if (blockedWaiter == null)
+                break;
             String served = rv.listValue.remove(0);
             respondToWaiter(blockedWaiter.key, key, served);
         }
@@ -212,7 +216,8 @@ public class RedisClientCommandHandler {
     }
 
     private void respondToWaiter(SelectionKey waiterKey, String key, String val) {
-        if (waiterKey == null) return;
+        if (waiterKey == null)
+            return;
         StringBuilder out = new StringBuilder();
         out.append("*2\r\n");
         out.append("$").append(key.length()).append("\r\n");
@@ -222,10 +227,14 @@ public class RedisClientCommandHandler {
         try {
             SocketChannel sc = (SocketChannel) waiterKey.channel();
             ByteBuffer resp = ByteBuffer.wrap(out.toString().getBytes(StandardCharsets.UTF_8));
-            while (resp.hasRemaining()) sc.write(resp);
+            while (resp.hasRemaining())
+                sc.write(resp);
             waiterKey.interestOps(SelectionKey.OP_READ);
         } catch (IOException e) {
-            try { waiterKey.channel().close(); } catch (IOException ignored) {}
+            try {
+                waiterKey.channel().close();
+            } catch (IOException ignored) {
+            }
             waiterKey.cancel();
             RedisClients.remove(waiterKey.channel());
         }
@@ -416,17 +425,20 @@ public class RedisClientCommandHandler {
     }
 
     public void processTimeouts() {
-        if (blocked.isEmpty()) return;
+        if (blocked.isEmpty())
+            return;
         long now = System.currentTimeMillis();
         List<String> keysToCleanup = new ArrayList<>();
         for (Map.Entry<String, Deque<BlockedWaiter>> entry : blocked.entrySet()) {
             Deque<BlockedWaiter> queue = entry.getValue();
-            if (queue == null || queue.isEmpty()) continue;
+            if (queue == null || queue.isEmpty())
+                continue;
 
             int initialSize = queue.size();
             for (int i = 0; i < initialSize; i++) {
                 BlockedWaiter bw = queue.peekFirst();
-                if (bw == null) break;
+                if (bw == null)
+                    break;
                 // Only time out those with deadlines; leave indefinite ones in place
                 if (bw.deadlineMs != null && now >= bw.deadlineMs) {
                     queue.pollFirst();
@@ -435,10 +447,14 @@ public class RedisClientCommandHandler {
                         SocketChannel sc = (SocketChannel) sk.channel();
                         String resp = "$-1\r\n"; // BLPOP timeout => null bulk in RESP2
                         ByteBuffer buf = ByteBuffer.wrap(resp.getBytes(StandardCharsets.UTF_8));
-                        while (buf.hasRemaining()) sc.write(buf);
+                        while (buf.hasRemaining())
+                            sc.write(buf);
                         sk.interestOps(SelectionKey.OP_READ);
                     } catch (IOException e) {
-                        try { sk.channel().close(); } catch (IOException ignored) {}
+                        try {
+                            sk.channel().close();
+                        } catch (IOException ignored) {
+                        }
                         sk.cancel();
                         RedisClients.remove(sk.channel());
                     }
@@ -448,9 +464,11 @@ public class RedisClientCommandHandler {
                     queue.addLast(queue.pollFirst());
                 }
             }
-            if (queue.isEmpty()) keysToCleanup.add(entry.getKey());
+            if (queue.isEmpty())
+                keysToCleanup.add(entry.getKey());
         }
-        for (String k : keysToCleanup) blocked.remove(k);
+        for (String k : keysToCleanup)
+            blocked.remove(k);
     }
 
     public String handleLRANGE(List<String> cmd) {
@@ -515,56 +533,99 @@ public class RedisClientCommandHandler {
     }
 
     public String handleTYPE(List<String> cmd) {
-        if(cmd.size()<2)
+        if (cmd.size() < 2)
             return "-ERR wrong number of arguments for 'TYPE'\r\n";
 
         String key = cmd.get(1);
-        if(store.containsKey(key)) {
-            if(store.get(key).isString())
+        if (store.containsKey(key)) {
+            if (store.get(key).isString())
                 return "+string\r\n";
-            else if(store.get(key).isStream())
+            else if (store.get(key).isStream())
                 return "+stream\r\n";
-            else if(store.get(key).isList())
+            else if (store.get(key).isList())
                 return "+list\r\n";
-        } 
-            
+        }
 
         return "+none\r\n";
     }
 
     public String handleXADD(List<String> cmd) {
-        if(cmd.size()<5)
+        if (cmd.size() < 5)
             return "-ERR wrong number of arguments for 'XADD'\r\n";
+    
         // XADD stream_key entry_id field1 value1 field2 value2 ...
         String stream_key = cmd.get(1);
         String entry_id = cmd.get(2);
-
-        if(store.containsKey(stream_key)) {
-            // RedisValue rv = store.get(stream_key);
-            if(store.get(stream_key).streamStore.containsKey(entry_id)) {
-                for(int i = 3 ; i<cmd.size() ; i=i+2) {
-                    String field = cmd.get(i);
-                    String value = cmd.get(i+1);
-                    store.get(stream_key).streamStore.get(entry_id).put(field, value);
-                }
-            } else {
-                Map<String, String> rv = new HashMap<String,String>();
-                for(int i = 3 ; i<cmd.size() ; i=i+2) {
-                    String field = cmd.get(i);
-                    String value = cmd.get(i+1);
-                    rv.put(field, value);
-                } 
-                store.get(stream_key).streamStore.put(entry_id, rv);
-            }
-        } else {
-            Map<String, String> mp = new HashMap<String,String>();
-            for(int i = 3 ; i<cmd.size() ; i=i+2) {
-                String field = cmd.get(i);
-                String value = cmd.get(i+1);
-                mp.put(field, value);
-            }
-            store.put(stream_key, new RedisValue(entry_id, mp));
+    
+        // Reject IDs <= 0-0 explicitly
+        if (entry_id.equals("0-0")) {
+            return "-ERR The ID specified in XADD must be greater than 0-0\r\n";
         }
-        return "$"+entry_id.length()+"\r\n"+entry_id+"\r\n";
+    
+        // Build field-value map from command args
+        Map<String, String> fields = new HashMap<>();
+        for (int i = 3; i < cmd.size(); i += 2) {
+            String field = cmd.get(i);
+            String value = cmd.get(i + 1);
+            fields.put(field, value);
+        }
+    
+        StreamIdComparator comparator = new StreamIdComparator();
+    
+        // If stream already exists
+        if (store.containsKey(stream_key)) {
+            TreeMap<String, Map<String, String>> stream = store.get(stream_key).streamStore;
+            String last_id = stream.lastKey();
+    
+            int cmp = comparator.compare(entry_id, last_id);
+    
+            if (cmp < 0) {
+                // New ID < last_id → reject
+                return "-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n";
+            } else if (cmp == 0) {
+                // ID is equal → bump sequence
+                entry_id = bumpSequence(last_id);
+            }
+    
+            // Put valid entry
+            stream.put(entry_id, fields);
+            return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
+        } 
+        else {
+            // First entry for a new stream
+            TreeMap<String, Map<String, String>> stream = new TreeMap<>(new StreamIdComparator());
+            stream.put(entry_id, fields);
+    
+            store.put(stream_key, new RedisValue(stream));
+            return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
+        }
     }
+    // Comparator for Redis Stream IDs
+class StreamIdComparator implements Comparator<String> {
+    @Override
+    public int compare(String id1, String id2) {
+        String[] parts1 = id1.split("-");
+        String[] parts2 = id2.split("-");
+
+        long time1 = Long.parseLong(parts1[0]);
+        long seq1 = Long.parseLong(parts1[1]);
+
+        long time2 = Long.parseLong(parts2[0]);
+        long seq2 = Long.parseLong(parts2[1]);
+
+        if (time1 != time2) {
+            return Long.compare(time1, time2);
+        }
+        return Long.compare(seq1, seq2);
+    }
+}
+
+// Helper to bump sequence number of an ID
+public String bumpSequence(String id) {
+    String[] parts = id.split("-");
+    long time = Long.parseLong(parts[0]);
+    long seq = Long.parseLong(parts[1]);
+    return time + "-" + (seq + 1);
+}
+    
 }
