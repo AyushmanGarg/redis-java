@@ -519,9 +519,52 @@ public class RedisClientCommandHandler {
             return "-ERR wrong number of arguments for 'TYPE'\r\n";
 
         String key = cmd.get(1);
-        if(store.containsKey(key)) 
-            return "+string\r\n";
+        if(store.containsKey(key)) {
+            if(store.get(key).isString())
+                return "+string\r\n";
+            else if(store.get(key).isStream())
+                return "+stream\r\n";
+            else if(store.get(key).isList())
+                return "+list\r\n";
+        } 
+            
 
         return "+none\r\n";
+    }
+
+    public String handleXADD(List<String> cmd) {
+        if(cmd.size()<5)
+            return "-ERR wrong number of arguments for 'XADD'\r\n";
+        // XADD stream_key entry_id field1 value1 field2 value2 ...
+        String stream_key = cmd.get(1);
+        String entry_id = cmd.get(2);
+
+        if(store.containsKey(stream_key)) {
+            // RedisValue rv = store.get(stream_key);
+            if(store.get(stream_key).streamStore.containsKey(entry_id)) {
+                for(int i = 3 ; i<cmd.size() ; i=i+2) {
+                    String field = cmd.get(i);
+                    String value = cmd.get(i+1);
+                    store.get(stream_key).streamStore.get(entry_id).put(field, value);
+                }
+            } else {
+                Map<String, String> rv = new HashMap<String,String>();
+                for(int i = 3 ; i<cmd.size() ; i=i+2) {
+                    String field = cmd.get(i);
+                    String value = cmd.get(i+1);
+                    rv.put(field, value);
+                } 
+                store.get(stream_key).streamStore.put(entry_id, rv);
+            }
+        } else {
+            Map<String, String> mp = new HashMap<String,String>();
+            for(int i = 3 ; i<cmd.size() ; i=i+2) {
+                String field = cmd.get(i);
+                String value = cmd.get(i+1);
+                mp.put(field, value);
+            }
+            store.put(stream_key, new RedisValue(entry_id, mp));
+        }
+        return "$"+entry_id.length()+"\r\n"+entry_id+"\r\n";
     }
 }
