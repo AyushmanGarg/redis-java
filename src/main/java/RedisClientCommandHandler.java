@@ -552,16 +552,17 @@ public class RedisClientCommandHandler {
     public String handleXADD(List<String> cmd) {
         if (cmd.size() < 5)
             return "-ERR wrong number of arguments for 'XADD'\r\n";
-    
+
         // XADD stream_key entry_id field1 value1 field2 value2 ...
         String stream_key = cmd.get(1);
         String entry_id = cmd.get(2);
-    
+        StreamIdComparator comparator = new StreamIdComparator();
         // Reject IDs <= 0-0 explicitly
-        if (entry_id.equals("0-0")) {
+        int cm = comparator.compare(entry_id, "0-0");
+        if (entry_id.equals("0-0") || cm <= 0) {
             return "-ERR The ID specified in XADD must be greater than 0-0\r\n";
         }
-    
+
         // Build field-value map from command args
         Map<String, String> fields = new HashMap<>();
         for (int i = 3; i < cmd.size(); i += 2) {
@@ -569,63 +570,45 @@ public class RedisClientCommandHandler {
             String value = cmd.get(i + 1);
             fields.put(field, value);
         }
-    
-        StreamIdComparator comparator = new StreamIdComparator();
-    
         // If stream already exists
         if (store.containsKey(stream_key)) {
             TreeMap<String, Map<String, String>> stream = store.get(stream_key).streamStore;
             String last_id = stream.lastKey();
-    
+
             int cmp = comparator.compare(entry_id, last_id);
-    
-            if (cmp < 0) {
-                // New ID < last_id → reject
+
+            if (cmp <= 0) {
                 return "-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n";
-            } else if (cmp == 0) {
-                // ID is equal → bump sequence
-                entry_id = bumpSequence(last_id);
             }
-    
-            // Put valid entry
             stream.put(entry_id, fields);
             return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
-        } 
-        else {
-            // First entry for a new stream
+        } else {
             TreeMap<String, Map<String, String>> stream = new TreeMap<>(new StreamIdComparator());
             stream.put(entry_id, fields);
-    
+
             store.put(stream_key, new RedisValue(stream));
             return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
         }
     }
-    // Comparator for Redis Stream IDs
-class StreamIdComparator implements Comparator<String> {
-    @Override
-    public int compare(String id1, String id2) {
-        String[] parts1 = id1.split("-");
-        String[] parts2 = id2.split("-");
 
-        long time1 = Long.parseLong(parts1[0]);
-        long seq1 = Long.parseLong(parts1[1]);
+    class StreamIdComparator implements Comparator<String> {
+        @Override
+        public int compare(String id1, String id2) {
+            String[] parts1 = id1.split("-");
+            String[] parts2 = id2.split("-");
 
-        long time2 = Long.parseLong(parts2[0]);
-        long seq2 = Long.parseLong(parts2[1]);
+            long time1 = Long.parseLong(parts1[0]);
+            long seq1 = Long.parseLong(parts1[1]);
 
-        if (time1 != time2) {
-            return Long.compare(time1, time2);
+            long time2 = Long.parseLong(parts2[0]);
+            long seq2 = Long.parseLong(parts2[1]);
+
+            if (time1 != time2) {
+                return Long.compare(time1, time2);
+            }
+            return Long.compare(seq1, seq2);
         }
-        return Long.compare(seq1, seq2);
     }
-}
 
-// Helper to bump sequence number of an ID
-public String bumpSequence(String id) {
-    String[] parts = id.split("-");
-    long time = Long.parseLong(parts[0]);
-    long seq = Long.parseLong(parts[1]);
-    return time + "-" + (seq + 1);
-}
-    
+
 }
