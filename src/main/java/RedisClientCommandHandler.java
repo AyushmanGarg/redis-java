@@ -553,11 +553,9 @@ public class RedisClientCommandHandler {
         if (cmd.size() < 5)
             return "-ERR wrong number of arguments for 'XADD'\r\n";
 
-        // XADD stream_key entry_id field1 value1 field2 value2 ...
         String stream_key = cmd.get(1);
         String entry_id = cmd.get(2);
         StreamIdComparator comparator = new StreamIdComparator();
-        // Reject IDs <= 0-0 explicitly
         int cm = comparator.compare(entry_id, "0-0");
         if (entry_id.equals("0-0") || cm <= 0) {
             return "-ERR The ID specified in XADD must be greater than 0-0\r\n";
@@ -570,24 +568,55 @@ public class RedisClientCommandHandler {
             String value = cmd.get(i + 1);
             fields.put(field, value);
         }
-        // If stream already exists
-        if (store.containsKey(stream_key)) {
-            TreeMap<String, Map<String, String>> stream = store.get(stream_key).streamStore;
-            String last_id = stream.lastKey();
+        String[] parts1 = entry_id.split("-");
+        if (parts1[1] == "*") {
+            if (store.containsKey(stream_key)) {
+                TreeMap<String, Map<String, String>> stream = store.get(stream_key).streamStore;
+                String last_id = stream.lastKey();
 
-            int cmp = comparator.compare(entry_id, last_id);
+                int cmp = comparator.compare(entry_id, last_id);
 
-            if (cmp <= 0) {
-                return "-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n";
+                if (cmp <= 0) {
+                    return "-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n";
+                } else if (cmp == 100) {
+                    String[] parts = last_id.split("-");
+                    long time = Long.parseLong(parts[0]);
+                    long seq = Long.parseLong(parts[1]);
+                    entry_id = time + "-" + (seq + 1);
+                }
+                stream.put(entry_id, fields);
+                return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
+            } else {
+                TreeMap<String, Map<String, String>> stream = new TreeMap<>(new StreamIdComparator());
+
+                String[] parts = entry_id.split("-");
+                long time = Long.parseLong(parts[0]);
+                entry_id = time + "-" + (0);
+
+                stream.put(entry_id, fields);
+
+                store.put(stream_key, new RedisValue(stream));
+                return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
             }
-            stream.put(entry_id, fields);
-            return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
         } else {
-            TreeMap<String, Map<String, String>> stream = new TreeMap<>(new StreamIdComparator());
-            stream.put(entry_id, fields);
+            if (store.containsKey(stream_key)) {
+                TreeMap<String, Map<String, String>> stream = store.get(stream_key).streamStore;
+                String last_id = stream.lastKey();
 
-            store.put(stream_key, new RedisValue(stream));
-            return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
+                int cmp = comparator.compare(entry_id, last_id);
+
+                if (cmp <= 0) {
+                    return "-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n";
+                }
+                stream.put(entry_id, fields);
+                return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
+            } else {
+                TreeMap<String, Map<String, String>> stream = new TreeMap<>(new StreamIdComparator());
+                stream.put(entry_id, fields);
+
+                store.put(stream_key, new RedisValue(stream));
+                return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
+            }
         }
     }
 
@@ -606,9 +635,10 @@ public class RedisClientCommandHandler {
             if (time1 != time2) {
                 return Long.compare(time1, time2);
             }
-            return Long.compare(seq1, seq2);
+            if (parts1[1] != "*")
+                return Long.compare(seq1, seq2);
+            return 100;
         }
     }
-
 
 }
