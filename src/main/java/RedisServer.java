@@ -46,23 +46,3 @@ public class RedisServer {
         }
     }
 }
-
-
-// Selection Key
-// lazy removal of elements
-// https://hannrul.medium.com/launch-a-client-and-http-server-connection-via-terminal-1ccceea9c4fa
-// redis system design
-// how redis works and its features
-// must delete the content from string builder after processing
-// need of bytebuffer and stringbuilder
-// NIO in detail
-// How socketAdress
-// what all can be registered to selector by client and server
-// why string builder needed and why bytebuffer is used
-// how selector selects
-// why flip not needed in stringbuilder
-// understand switch and case
-// in BLPOP how is selector sending logs to correct client is it via key?
-//  for type command in redisva;lue a key can only have a string or a list?
-// hashmap vs map and new keyword
-// error parsing in resp
