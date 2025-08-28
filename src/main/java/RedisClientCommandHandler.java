@@ -555,9 +555,14 @@ public class RedisClientCommandHandler {
 
         String stream_key = cmd.get(1);
         String entry_id = cmd.get(2);
-        StreamIdComparator comparator = new StreamIdComparator();
-        int cm = comparator.compare(entry_id, "0-0");
-        if (entry_id.equals("0-0") || cm <= 0) {
+        
+        // Handle auto-generation of IDs first
+        if (entry_id.contains("*")) {
+            entry_id = generateStreamId(stream_key, entry_id);
+        }
+        
+        // Now validate the generated ID
+        if (entry_id.equals("0-0")) {
             return "-ERR The ID specified in XADD must be greater than 0-0\r\n";
         }
 
@@ -568,55 +573,33 @@ public class RedisClientCommandHandler {
             String value = cmd.get(i + 1);
             fields.put(field, value);
         }
-        String[] parts1 = entry_id.split("-");
-        if (parts1[1] == "*") {
-            if (store.containsKey(stream_key)) {
-                TreeMap<String, Map<String, String>> stream = store.get(stream_key).streamStore;
-                String last_id = stream.lastKey();
 
-                int cmp = comparator.compare(entry_id, last_id);
 
-                if (cmp <= 0) {
-                    return "-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n";
-                } else if (cmp == 100) {
-                    String[] parts = last_id.split("-");
-                    long time = Long.parseLong(parts[0]);
-                    long seq = Long.parseLong(parts[1]);
-                    entry_id = time + "-" + (seq + 1);
-                }
-                stream.put(entry_id, fields);
-                return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
-            } else {
-                TreeMap<String, Map<String, String>> stream = new TreeMap<>(new StreamIdComparator());
-
-                String[] parts = entry_id.split("-");
-                long time = Long.parseLong(parts[0]);
-                entry_id = time + "-" + (0);
-
-                stream.put(entry_id, fields);
-
-                store.put(stream_key, new RedisValue(stream));
-                return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
+        // If stream already exists
+        if (store.containsKey(stream_key)) {
+            RedisValue rv = store.get(stream_key);
+            if (rv.streamStore == null) {
+                rv.streamStore = new TreeMap<>(new StreamIdComparator());
             }
+            
+            String last_id = rv.streamStore.isEmpty() ? "0-0" : rv.streamStore.lastKey();
+            StreamIdComparator comparator = new StreamIdComparator();
+            
+            int cmp = comparator.compare(entry_id, last_id);
+            if (cmp <= 0) {
+                return "-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n";
+            }
+            
+            rv.streamStore.put(entry_id, fields);
+            return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
         } else {
-            if (store.containsKey(stream_key)) {
-                TreeMap<String, Map<String, String>> stream = store.get(stream_key).streamStore;
-                String last_id = stream.lastKey();
-
-                int cmp = comparator.compare(entry_id, last_id);
-
-                if (cmp <= 0) {
-                    return "-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n";
-                }
-                stream.put(entry_id, fields);
-                return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
-            } else {
-                TreeMap<String, Map<String, String>> stream = new TreeMap<>(new StreamIdComparator());
-                stream.put(entry_id, fields);
-
-                store.put(stream_key, new RedisValue(stream));
-                return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
-            }
+            // First entry for a new stream
+            TreeMap<String, Map<String, String>> stream = new TreeMap<>(new StreamIdComparator());
+            stream.put(entry_id, fields);
+            
+            RedisValue streamValue = new RedisValue(stream);
+            store.put(stream_key, streamValue);
+            return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
         }
     }
 
@@ -639,6 +622,44 @@ public class RedisClientCommandHandler {
                 return Long.compare(seq1, seq2);
             return 100;
         }
+    }
+    
+    private String generateStreamId(String stream_key, String partial_id) {
+        String[] parts = partial_id.split("-");
+        long timestamp;
+        long sequence = 0;
+        
+        if (parts[0].equals("*")) {
+            // *-* format: generate both timestamp and sequence
+            timestamp = System.currentTimeMillis();
+        } else {
+            // 123-* format: use provided timestamp, generate sequence
+            timestamp = Long.parseLong(parts[0]);
+        }
+        
+        // If stream exists, find the next available sequence
+        if (store.containsKey(stream_key)) {
+            RedisValue rv = store.get(stream_key);
+            if (rv.streamStore != null && !rv.streamStore.isEmpty()) {
+                String last_id = rv.streamStore.lastKey();
+                String[] last_parts = last_id.split("-");
+                long last_timestamp = Long.parseLong(last_parts[0]);
+                long last_sequence = Long.parseLong(last_parts[1]);
+                
+                if (timestamp <= last_timestamp) {
+                    timestamp = last_timestamp;
+                    sequence = last_sequence + 1;
+                } else {
+                    sequence = 0;
+                }
+            }
+        }
+    
+        if (timestamp == 0 && !store.containsKey(stream_key)) {
+            sequence = 1;
+        }
+        
+        return timestamp + "-" + sequence;
     }
 
 }
