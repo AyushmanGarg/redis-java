@@ -738,79 +738,98 @@ public class RedisClientCommandHandler {
     }
 
     public String handleXREAD(List<String> cmd) {
-        // Minimal XREAD support for the test cases:
-        // Expected form: XREAD STREAMS <stream_key> <id>
+        // Extended XREAD support for multiple streams.
+        // Expected form: XREAD STREAMS <key1> <key2> ... <keyN> <id1> <id2> ... <idN>
         if (cmd.size() < 4)
             return "-ERR wrong number of arguments for 'XREAD'\r\n";
 
-        // Accept "STREAMS" keyword case-insensitively at position 1
         if (!"STREAMS".equalsIgnoreCase(cmd.get(1)))
             return "-ERR syntax error\r\n";
 
-        String stream_key = cmd.get(2);
-        String idRaw = cmd.get(3);
+        int remaining = cmd.size() - 2; // after "XREAD" and "STREAMS"
+        if (remaining < 2)
+            return "-ERR wrong number of arguments for 'XREAD'\r\n";
 
-        // start id is exclusive: only entries with ID > provided ID are returned
-        String startId = normalizeRangeId(idRaw, true);
+        if (remaining % 2 != 0)
+            return "-ERR syntax error\r\n";
 
-        RedisValue rv = store.get(stream_key);
-        if (rv == null)
-            return "*0\r\n";
+        int numStreams = remaining / 2;
+        List<String> streamKeys = new ArrayList<>(numStreams);
+        List<String> idsRaw = new ArrayList<>(numStreams);
 
-        if (!rv.isStream()) {
-            return "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n";
+        for (int i = 0; i < numStreams; i++) {
+            streamKeys.add(cmd.get(2 + i));
+        }
+        for (int i = 0; i < numStreams; i++) {
+            idsRaw.add(cmd.get(2 + numStreams + i));
         }
 
-        if (rv.streamStore == null || rv.streamStore.isEmpty())
-            return "*0\r\n";
+        // For each stream, collect entries with ID > provided ID (exclusive)
+        List<Map.Entry<String, SortedMap<String, Map<String, String>>>> results = new ArrayList<>();
+        for (int i = 0; i < numStreams; i++) {
+            String streamKey = streamKeys.get(i);
+            String idRaw = idsRaw.get(i);
+            String startId = normalizeRangeId(idRaw, true);
 
-        // get tailMap strictly greater than startId
-        SortedMap<String, Map<String, String>> tail;
-        try {
-            tail = rv.streamStore.tailMap(startId, false);
-        } catch (IllegalArgumentException e) {
-            return "*0\r\n";
+            RedisValue rv = store.get(streamKey);
+            if (rv == null || !rv.isStream() || rv.streamStore == null || rv.streamStore.isEmpty()) {
+                // no entries for this stream -> skip
+                continue;
+            }
+
+            SortedMap<String, Map<String, String>> tail;
+            try {
+                tail = rv.streamStore.tailMap(startId, false); // exclusive
+            } catch (IllegalArgumentException e) {
+                continue;
+            }
+            if (tail != null && !tail.isEmpty()) {
+                results.add(new AbstractMap.SimpleEntry<>(streamKey, tail));
+            }
         }
 
-        if (tail.isEmpty())
+        if (results.isEmpty())
             return "*0\r\n";
 
         StringBuilder out = new StringBuilder();
+        out.append("*").append(results.size()).append("\r\n");
 
-        // number of streams (we only handle single-stream case in tests)
-        out.append("*1\r\n");
+        for (Map.Entry<String, SortedMap<String, Map<String, String>>> streamEntry : results) {
+            String streamKey = streamEntry.getKey();
+            SortedMap<String, Map<String, String>> entries = streamEntry.getValue();
 
-        // each stream element: array of 2 items: [stream-name, [entries...]]
-        out.append("*2\r\n");
-
-        // stream name
-        out.append("$").append(stream_key.length()).append("\r\n");
-        out.append(stream_key).append("\r\n");
-
-        // entries array
-        out.append("*").append(tail.size()).append("\r\n");
-
-        for (Map.Entry<String, Map<String, String>> entry : tail.entrySet()) {
-            String entryId = entry.getKey();
-            Map<String, String> fields = entry.getValue();
-
-            // each entry is an array of 2: [id, [field, value, ...]]
+            // stream element: array of 2 [stream-name, [entries...]]
             out.append("*2\r\n");
 
-            // id bulk
-            out.append("$").append(entryId.length()).append("\r\n");
-            out.append(entryId).append("\r\n");
+            // stream name bulk
+            out.append("$").append(streamKey.length()).append("\r\n");
+            out.append(streamKey).append("\r\n");
 
-            // fields array (flat list of strings)
-            int kvCount = fields.size() * 2;
-            out.append("*").append(kvCount).append("\r\n");
-            for (Map.Entry<String, String> kv : fields.entrySet()) {
-                String f = kv.getKey();
-                String v = kv.getValue();
-                out.append("$").append(f.length()).append("\r\n");
-                out.append(f).append("\r\n");
-                out.append("$").append(v.length()).append("\r\n");
-                out.append(v).append("\r\n");
+            // entries array
+            out.append("*").append(entries.size()).append("\r\n");
+
+            for (Map.Entry<String, Map<String, String>> e : entries.entrySet()) {
+                String entryId = e.getKey();
+                Map<String, String> fields = e.getValue();
+
+                // each entry is an array of 2: [id, [field, value, ...]]
+                out.append("*2\r\n");
+
+                // id bulk
+                out.append("$").append(entryId.length()).append("\r\n");
+                out.append(entryId).append("\r\n");
+
+                // fields array (flat list of strings)
+                int kvCount = fields.size() * 2;
+                out.append("*").append(kvCount).append("\r\n");
+                for (Map.Entry<String, String> kv : fields.entrySet()) {
+                    String f = kv.getKey();
+                    String v = kv.getValue();
+                    out.append("$").append(f.length()).append("\r\n");
+                    out.append(f).append("\r\n");
+                    out.append("$").append(v.length()).append("\r\n");
+                    out.append(v).append("\r\n");
+                }
             }
         }
 
