@@ -15,7 +15,7 @@ public class RedisClientCommandHandler {
         // For XREAD waiters:
         final boolean isXRead;
         final List<String> xreadStreamKeys; // null if not XREAD
-        final List<String> xreadIdsRaw;     // null if not XREAD
+        final List<String> xreadIdsRaw;     // resolved ids (no "$" marker) for XREAD
 
         BlockedWaiter(SelectionKey key, Long deadlineMs) {
             this.key = key;
@@ -742,6 +742,11 @@ public class RedisClientCommandHandler {
         return out.toString();
     }
 
+    /**
+     * Blocking-capable XREAD (supports: XREAD [BLOCK <ms>] STREAMS <k1>.. <kN> <id1>.. <idN>).
+     * Resolves "$" into the current stream max id at registration time so waiters only
+     * receive entries added after the command was issued.
+     */
     public String handleXREAD(List<String> cmd, SelectionKey currentKey) {
         if (cmd.size() < 3)
             return "-ERR wrong number of arguments for 'XREAD'\r\n";
@@ -780,19 +785,37 @@ public class RedisClientCommandHandler {
 
         int numStreams = remaining / 2;
         List<String> streamKeys = new ArrayList<>(numStreams);
-        List<String> idsRaw = new ArrayList<>(numStreams);
+        List<String> idsRawCmd = new ArrayList<>(numStreams);
 
         for (int i = 0; i < numStreams; i++) {
             streamKeys.add(cmd.get(idx + i));
         }
         for (int i = 0; i < numStreams; i++) {
-            idsRaw.add(cmd.get(idx + numStreams + i));
+            idsRawCmd.add(cmd.get(idx + numStreams + i));
         }
 
+        // Resolve "$" marker now if present into the current max id for each stream.
+        List<String> resolvedIds = new ArrayList<>(numStreams);
+        for (int i = 0; i < numStreams; i++) {
+            String streamKey = streamKeys.get(i);
+            String idRaw = idsRawCmd.get(i);
+            if ("$".equals(idRaw)) {
+                RedisValue rv = store.get(streamKey);
+                if (rv != null && rv.isStream() && rv.streamStore != null && !rv.streamStore.isEmpty()) {
+                    resolvedIds.add(rv.streamStore.lastKey());
+                } else {
+                    resolvedIds.add("0-0");
+                }
+            } else {
+                resolvedIds.add(idRaw);
+            }
+        }
+
+        // For each stream, collect entries with ID > provided ID (exclusive)
         List<Map.Entry<String, SortedMap<String, Map<String, String>>>> results = new ArrayList<>();
         for (int i = 0; i < numStreams; i++) {
             String streamKey = streamKeys.get(i);
-            String idRaw = idsRaw.get(i);
+            String idRaw = resolvedIds.get(i);
             String startId = normalizeRangeId(idRaw, true);
 
             RedisValue rv = store.get(streamKey);
@@ -855,7 +878,8 @@ public class RedisClientCommandHandler {
             return "*0\r\n";
         }
 
-        BlockedWaiter waiter = new BlockedWaiter(currentKey, deadlineMs, streamKeys, idsRaw);
+        // Register waiter using resolvedIds so "$" is no longer present at notify time.
+        BlockedWaiter waiter = new BlockedWaiter(currentKey, deadlineMs, streamKeys, resolvedIds);
 
         for (String s : streamKeys) {
             Deque<BlockedWaiter> q = blocked.computeIfAbsent(s, k -> new ArrayDeque<>());
@@ -892,7 +916,7 @@ public class RedisClientCommandHandler {
             return;
         }
         List<String> streamKeys = waiter.xreadStreamKeys;
-        List<String> idsRaw = waiter.xreadIdsRaw;
+        List<String> idsRaw = waiter.xreadIdsRaw; // already resolved (no "$")
         List<Map.Entry<String, SortedMap<String, Map<String, String>>>> results = new ArrayList<>();
 
         for (int i = 0; i < streamKeys.size(); i++) {
