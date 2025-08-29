@@ -121,7 +121,7 @@ public class RedisClientHandler {
                 return cmdHandler.handleXRANGE(cmd);
             
             case "XREAD":
-                return cmdHandler.handleXREAD(cmd);
+                return cmdHandler.handleXREAD(cmd, currentKey);
 
             default:
                 return "-ERR unknown command '" + cmd.get(0) + "'\r\n";

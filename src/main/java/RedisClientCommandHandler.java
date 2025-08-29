@@ -12,9 +12,32 @@ public class RedisClientCommandHandler {
         final SelectionKey key;
         final Long deadlineMs; // null means block indefinitely
 
+        // For XREAD waiters:
+        final boolean isXRead;
+        final List<String> xreadStreamKeys; // null if not XREAD
+        final List<String> xreadIdsRaw;     // null if not XREAD
+
         BlockedWaiter(SelectionKey key, Long deadlineMs) {
             this.key = key;
             this.deadlineMs = deadlineMs;
+            this.isXRead = false;
+            this.xreadStreamKeys = null;
+            this.xreadIdsRaw = null;
+        }
+
+        BlockedWaiter(SelectionKey key, Long deadlineMs, List<String> xreadStreamKeys, List<String> xreadIdsRaw) {
+            this.key = key;
+            this.deadlineMs = deadlineMs;
+            this.isXRead = true;
+            this.xreadStreamKeys = xreadStreamKeys;
+            this.xreadIdsRaw = xreadIdsRaw;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            // Use object identity semantics (default), but some Deque.remove uses equals.
+            // We'll compare by object identity: so leave default equals (object identity).
+            return super.equals(o);
         }
     }
 
@@ -372,8 +395,7 @@ public class RedisClientCommandHandler {
     }
 
     public String handleBLPOP(List<String> cmd, SelectionKey currentKey) {
-        // BLPOP key timeout (timeout is seconds). In tests timeout always 0 (block
-        // indefinitely)
+        // BLPOP key timeout (timeout is seconds).
         if (cmd.size() < 3)
             return "-ERR wrong number of arguments for 'BLPOP'\r\n";
         String key = cmd.get(1);
@@ -390,8 +412,7 @@ public class RedisClientCommandHandler {
         }
 
         RedisValue rv = store.get(key);
-        // if list exists and has elements -> behave like LPOP and return immediately as
-        // array [key, value]
+        // if list exists and has elements -> behave like LPOP and return immediately as array [key, value]
         if (rv != null) {
             // expiry check
             if (rv.expiry != null && System.currentTimeMillis() > rv.expiry) {
@@ -411,13 +432,11 @@ public class RedisClientCommandHandler {
             return out.toString();
         }
 
-        // Otherwise, no element now -> block this client indefinitely (tests use
-        // timeout 0)
+        // Otherwise, no element now -> block this client
         Deque<BlockedWaiter> waiters = blocked.computeIfAbsent(key, k -> new ArrayDeque<>());
         waiters.addLast(new BlockedWaiter(currentKey, deadlineMs));
 
-        // disable read interest for this key so we don't try to read more from a
-        // blocked client
+        // disable read interest for this key so we don't try to read more from a blocked client
         currentKey.interestOps(0);
 
         // return null to indicate no immediate response (client is blocked)
@@ -445,7 +464,7 @@ public class RedisClientCommandHandler {
                     SelectionKey sk = bw.key;
                     try {
                         SocketChannel sc = (SocketChannel) sk.channel();
-                        String resp = "$-1\r\n"; // BLPOP timeout => null bulk in RESP2
+                        String resp = "$-1\r\n"; // BLPOP/XREAD timeout => null bulk in RESP2
                         ByteBuffer buf = ByteBuffer.wrap(resp.getBytes(StandardCharsets.UTF_8));
                         while (buf.hasRemaining())
                             sc.write(buf);
@@ -457,6 +476,17 @@ public class RedisClientCommandHandler {
                         }
                         sk.cancel();
                         RedisClients.remove(sk.channel());
+                    }
+                    // If this waiter was an XREAD waiter, remove it from all other queues
+                    if (bw.isXRead && bw.xreadStreamKeys != null) {
+                        for (String otherKey : bw.xreadStreamKeys) {
+                            if (otherKey.equals(entry.getKey()))
+                                continue;
+                            Deque<BlockedWaiter> otherQueue = blocked.get(otherKey);
+                            if (otherQueue != null) {
+                                otherQueue.remove(bw);
+                            }
+                        }
                     }
                 } else {
                     // Not timed out (either no deadline or deadline not reached). Move to back
@@ -582,6 +612,22 @@ public class RedisClientCommandHandler {
             }
 
             rv.streamStore.put(entry_id, fields);
+
+            // Notify any XREAD waiters waiting on this stream
+            Deque<BlockedWaiter> waiters = blocked.get(stream_key);
+            if (waiters != null && !waiters.isEmpty()) {
+                // Snapshot to avoid concurrent modification while we remove
+                List<BlockedWaiter> snapshot = new ArrayList<>(waiters);
+                for (BlockedWaiter bw : snapshot) {
+                    if (bw == null) continue;
+                    if (bw.isXRead) {
+                        // remove from all queues and respond
+                        removeWaiterFromAllQueues(bw);
+                        respondToXReadWaiter(bw);
+                    }
+                }
+            }
+
             return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
         } else {
             // First entry for a new stream
@@ -590,6 +636,20 @@ public class RedisClientCommandHandler {
 
             RedisValue streamValue = new RedisValue(stream);
             store.put(stream_key, streamValue);
+
+            // Notify any XREAD waiters waiting on this stream
+            Deque<BlockedWaiter> waiters = blocked.get(stream_key);
+            if (waiters != null && !waiters.isEmpty()) {
+                List<BlockedWaiter> snapshot = new ArrayList<>(waiters);
+                for (BlockedWaiter bw : snapshot) {
+                    if (bw == null) continue;
+                    if (bw.isXRead) {
+                        removeWaiterFromAllQueues(bw);
+                        respondToXReadWaiter(bw);
+                    }
+                }
+            }
+
             return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
         }
     }
@@ -737,19 +797,44 @@ public class RedisClientCommandHandler {
         return out.toString();
     }
 
-    public String handleXREAD(List<String> cmd) {
-        // Extended XREAD support for multiple streams.
-        // Expected form: XREAD STREAMS <key1> <key2> ... <keyN> <id1> <id2> ... <idN>
-        if (cmd.size() < 4)
+    /**
+     * Blocking-capable XREAD (supports: XREAD [BLOCK <ms>] STREAMS <k1>.. <kN> <id1>.. <idN>).
+     * - If data is available immediately, returns RESP reply string.
+     * - If no data and BLOCK is not specified, returns "*0\r\n" (empty array).
+     * - If no data and BLOCK specified, registers a waiter and returns null to indicate the client
+     *   is now blocked (the selector loop must not write a reply).
+     */
+    public String handleXREAD(List<String> cmd, SelectionKey currentKey) {
+        if (cmd.size() < 3)
             return "-ERR wrong number of arguments for 'XREAD'\r\n";
 
-        if (!"STREAMS".equalsIgnoreCase(cmd.get(1)))
-            return "-ERR syntax error\r\n";
+        int idx = 1;
+        boolean isBlocking = false;
+        long blockMs = 0;
+        Long deadlineMs = null;
 
-        int remaining = cmd.size() - 2; // after "XREAD" and "STREAMS"
+        // Optional BLOCK <ms>
+        if (idx < cmd.size() && "BLOCK".equalsIgnoreCase(cmd.get(idx))) {
+            if (idx + 1 >= cmd.size())
+                return "-ERR syntax error\r\n";
+            try {
+                blockMs = Long.parseLong(cmd.get(idx + 1));
+                isBlocking = true;
+                if (blockMs > 0)
+                    deadlineMs = System.currentTimeMillis() + blockMs;
+            } catch (NumberFormatException e) {
+                return "-ERR value is not an integer or out of range\r\n";
+            }
+            idx += 2;
+        }
+
+        if (idx >= cmd.size() || !"STREAMS".equalsIgnoreCase(cmd.get(idx)))
+            return "-ERR syntax error\r\n";
+        idx++;
+
+        int remaining = cmd.size() - idx;
         if (remaining < 2)
             return "-ERR wrong number of arguments for 'XREAD'\r\n";
-
         if (remaining % 2 != 0)
             return "-ERR syntax error\r\n";
 
@@ -758,10 +843,10 @@ public class RedisClientCommandHandler {
         List<String> idsRaw = new ArrayList<>(numStreams);
 
         for (int i = 0; i < numStreams; i++) {
-            streamKeys.add(cmd.get(2 + i));
+            streamKeys.add(cmd.get(idx + i));
         }
         for (int i = 0; i < numStreams; i++) {
-            idsRaw.add(cmd.get(2 + numStreams + i));
+            idsRaw.add(cmd.get(idx + numStreams + i));
         }
 
         // For each stream, collect entries with ID > provided ID (exclusive)
@@ -788,52 +873,189 @@ public class RedisClientCommandHandler {
             }
         }
 
-        if (results.isEmpty())
-            return "*0\r\n";
+        if (!results.isEmpty()) {
+            // immediate response (non-blocking or data already present)
+            StringBuilder out = new StringBuilder();
+            out.append("*").append(results.size()).append("\r\n");
 
-        StringBuilder out = new StringBuilder();
-        out.append("*").append(results.size()).append("\r\n");
+            for (Map.Entry<String, SortedMap<String, Map<String, String>>> streamEntry : results) {
+                String streamKey = streamEntry.getKey();
+                SortedMap<String, Map<String, String>> entries = streamEntry.getValue();
 
-        for (Map.Entry<String, SortedMap<String, Map<String, String>>> streamEntry : results) {
-            String streamKey = streamEntry.getKey();
-            SortedMap<String, Map<String, String>> entries = streamEntry.getValue();
-
-            // stream element: array of 2 [stream-name, [entries...]]
-            out.append("*2\r\n");
-
-            // stream name bulk
-            out.append("$").append(streamKey.length()).append("\r\n");
-            out.append(streamKey).append("\r\n");
-
-            // entries array
-            out.append("*").append(entries.size()).append("\r\n");
-
-            for (Map.Entry<String, Map<String, String>> e : entries.entrySet()) {
-                String entryId = e.getKey();
-                Map<String, String> fields = e.getValue();
-
-                // each entry is an array of 2: [id, [field, value, ...]]
+                // stream element: array of 2 [stream-name, [entries...]]
                 out.append("*2\r\n");
 
-                // id bulk
-                out.append("$").append(entryId.length()).append("\r\n");
-                out.append(entryId).append("\r\n");
+                // stream name bulk
+                out.append("$").append(streamKey.length()).append("\r\n");
+                out.append(streamKey).append("\r\n");
 
-                // fields array (flat list of strings)
-                int kvCount = fields.size() * 2;
-                out.append("*").append(kvCount).append("\r\n");
-                for (Map.Entry<String, String> kv : fields.entrySet()) {
-                    String f = kv.getKey();
-                    String v = kv.getValue();
-                    out.append("$").append(f.length()).append("\r\n");
-                    out.append(f).append("\r\n");
-                    out.append("$").append(v.length()).append("\r\n");
-                    out.append(v).append("\r\n");
+                // entries array
+                out.append("*").append(entries.size()).append("\r\n");
+
+                for (Map.Entry<String, Map<String, String>> e : entries.entrySet()) {
+                    String entryId = e.getKey();
+                    Map<String, String> fields = e.getValue();
+
+                    // each entry is an array of 2: [id, [field, value, ...]]
+                    out.append("*2\r\n");
+
+                    // id bulk
+                    out.append("$").append(entryId.length()).append("\r\n");
+                    out.append(entryId).append("\r\n");
+
+                    // fields array (flat list of strings)
+                    int kvCount = fields.size() * 2;
+                    out.append("*").append(kvCount).append("\r\n");
+                    for (Map.Entry<String, String> kv : fields.entrySet()) {
+                        String f = kv.getKey();
+                        String v = kv.getValue();
+                        out.append("$").append(f.length()).append("\r\n");
+                        out.append(f).append("\r\n");
+                        out.append("$").append(v.length()).append("\r\n");
+                        out.append(v).append("\r\n");
+                    }
                 }
+            }
+
+            return out.toString();
+        }
+
+        // No immediate data
+        if (!isBlocking) {
+            // non-blocking and no results -> empty array
+            return "*0\r\n";
+        }
+
+        // Create and register a blocking XREAD waiter on each stream
+        BlockedWaiter waiter = new BlockedWaiter(currentKey, deadlineMs, streamKeys, idsRaw);
+
+        for (String s : streamKeys) {
+            Deque<BlockedWaiter> q = blocked.computeIfAbsent(s, k -> new ArrayDeque<>());
+            q.addLast(waiter);
+        }
+
+        // disable read interest for this key so we don't try to read more from a blocked client
+        currentKey.interestOps(0);
+
+        // return null to indicate no immediate response (client is blocked)
+        return null;
+    }
+
+    // Helper to remove waiter from all queues it's present in
+    private void removeWaiterFromAllQueues(BlockedWaiter waiter) {
+        if (waiter == null)
+            return;
+        if (!waiter.isXRead)
+            return;
+        if (waiter.xreadStreamKeys == null)
+            return;
+        for (String k : waiter.xreadStreamKeys) {
+            Deque<BlockedWaiter> q = blocked.get(k);
+            if (q != null) {
+                q.remove(waiter);
+                if (q.isEmpty())
+                    blocked.remove(k);
+            }
+        }
+    }
+
+    // Build and write XREAD response for a blocked waiter (called when stream got new data).
+    private void respondToXReadWaiter(BlockedWaiter waiter) {
+        if (waiter == null || !waiter.isXRead)
+            return;
+        SelectionKey sk = waiter.key;
+        if (sk == null) {
+            // Should not happen but guard
+            return;
+        }
+        List<String> streamKeys = waiter.xreadStreamKeys;
+        List<String> idsRaw = waiter.xreadIdsRaw;
+        List<Map.Entry<String, SortedMap<String, Map<String, String>>>> results = new ArrayList<>();
+
+        for (int i = 0; i < streamKeys.size(); i++) {
+            String streamKey = streamKeys.get(i);
+            String idRaw = idsRaw.get(i);
+            String startId = normalizeRangeId(idRaw, true);
+
+            RedisValue rv = store.get(streamKey);
+            if (rv == null || !rv.isStream() || rv.streamStore == null || rv.streamStore.isEmpty())
+                continue;
+
+            SortedMap<String, Map<String, String>> tail;
+            try {
+                tail = rv.streamStore.tailMap(startId, false);
+            } catch (IllegalArgumentException e) {
+                continue;
+            }
+            if (tail != null && !tail.isEmpty()) {
+                results.add(new AbstractMap.SimpleEntry<>(streamKey, tail));
             }
         }
 
-        return out.toString();
+        String resp;
+        if (results.isEmpty()) {
+            // No data yet (race). Return null-bulk to the client.
+            resp = "$-1\r\n";
+        } else {
+            StringBuilder out = new StringBuilder();
+            out.append("*").append(results.size()).append("\r\n");
+
+            for (Map.Entry<String, SortedMap<String, Map<String, String>>> streamEntry : results) {
+                String streamKey = streamEntry.getKey();
+                SortedMap<String, Map<String, String>> entries = streamEntry.getValue();
+
+                // stream element: array of 2 [stream-name, [entries...]]
+                out.append("*2\r\n");
+
+                // stream name bulk
+                out.append("$").append(streamKey.length()).append("\r\n");
+                out.append(streamKey).append("\r\n");
+
+                // entries array
+                out.append("*").append(entries.size()).append("\r\n");
+
+                for (Map.Entry<String, Map<String, String>> e : entries.entrySet()) {
+                    String entryId = e.getKey();
+                    Map<String, String> fields = e.getValue();
+
+                    // each entry is an array of 2: [id, [field, value, ...]]
+                    out.append("*2\r\n");
+
+                    // id bulk
+                    out.append("$").append(entryId.length()).append("\r\n");
+                    out.append(entryId).append("\r\n");
+
+                    // fields array (flat list of strings)
+                    int kvCount = fields.size() * 2;
+                    out.append("*").append(kvCount).append("\r\n");
+                    for (Map.Entry<String, String> kv : fields.entrySet()) {
+                        String f = kv.getKey();
+                        String v = kv.getValue();
+                        out.append("$").append(f.length()).append("\r\n");
+                        out.append(f).append("\r\n");
+                        out.append("$").append(v.length()).append("\r\n");
+                        out.append(v).append("\r\n");
+                    }
+                }
+            }
+
+            resp = out.toString();
+        }
+
+        try {
+            SocketChannel sc = (SocketChannel) sk.channel();
+            ByteBuffer buf = ByteBuffer.wrap(resp.getBytes(StandardCharsets.UTF_8));
+            while (buf.hasRemaining())
+                sc.write(buf);
+            sk.interestOps(SelectionKey.OP_READ);
+        } catch (IOException e) {
+            try {
+                sk.channel().close();
+            } catch (IOException ignored) {
+            }
+            sk.cancel();
+            RedisClients.remove(sk.channel());
+        }
     }
 
 }
