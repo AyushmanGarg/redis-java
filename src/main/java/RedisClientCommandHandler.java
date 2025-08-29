@@ -32,13 +32,6 @@ public class RedisClientCommandHandler {
             this.xreadStreamKeys = xreadStreamKeys;
             this.xreadIdsRaw = xreadIdsRaw;
         }
-
-        @Override
-        public boolean equals(Object o) {
-            // Use object identity semantics (default), but some Deque.remove uses equals.
-            // We'll compare by object identity: so leave default equals (object identity).
-            return super.equals(o);
-        }
     }
 
     private final Map<String, Deque<BlockedWaiter>> blocked;
@@ -85,25 +78,23 @@ public class RedisClientCommandHandler {
                 pos = lenEnd + 2;
 
                 if (bulkLen < 0) {
-                    // NULL bulk string ($-1), represent as null
                     parts.add(null);
                     continue;
                 }
 
                 if (pos + bulkLen + 2 > sb.length())
-                    return null; // not all bytes arrived yet
+                    return null;
 
                 String bulkStr = sb.substring(pos, pos + bulkLen);
                 parts.add(bulkStr);
 
-                pos += bulkLen + 2; // skip bulk data and trailing \r\n
+                pos += bulkLen + 2;
             }
 
-            sb.delete(0, pos); // remove parsed command
+            sb.delete(0, pos);
             System.out.println(parts);
             return parts;
         } else {
-            // Inline command (like "PING\r\n")
             int lineEnd = sb.indexOf("\r\n");
             if (lineEnd == -1)
                 return null;
@@ -123,7 +114,6 @@ public class RedisClientCommandHandler {
         if (cmd.size() < 2)
             return "-ERR wrong number of arguments for 'ECHO'\r\n";
         return "$" + cmd.get(1).length() + "\r\n" + cmd.get(1) + "\r\n";
-
     }
 
     public String handleSET(List<String> cmd) {
@@ -134,7 +124,6 @@ public class RedisClientCommandHandler {
         String value = cmd.get(2);
         Long expiry = null;
 
-        // Handle optional PX (case-insensitive)
         if (cmd.size() >= 5 && "PX".equalsIgnoreCase(cmd.get(3))) {
             try {
                 long px = Long.parseLong(cmd.get(4));
@@ -159,7 +148,6 @@ public class RedisClientCommandHandler {
             return "$-1\r\n";
         }
 
-        // Check expiry
         if (rv.expiry != null && System.currentTimeMillis() > rv.expiry) {
             store.remove(key);
             return "$-1\r\n";
@@ -183,13 +171,11 @@ public class RedisClientCommandHandler {
             values.add(cmd.get(i));
         }
 
-        // Append all values to the list first, compute new size to return
         RedisValue rv = store.get(key);
         if (rv == null) {
             List<String> list = new ArrayList<>(values);
             store.put(key, new RedisValue(list, null));
             int newSize = list.size();
-            // After appending, serve any blocked waiters by popping from left
             Deque<BlockedWaiter> waiters = blocked.get(key);
             while (waiters != null && !waiters.isEmpty() && !list.isEmpty()) {
                 BlockedWaiter blockedWaiter = waiters.pollFirst();
@@ -201,7 +187,6 @@ public class RedisClientCommandHandler {
             return ":" + newSize + "\r\n";
         }
 
-        // check expiry before using
         if (rv.expiry != null && System.currentTimeMillis() > rv.expiry) {
             store.remove(key);
             List<String> list = new ArrayList<>(values);
@@ -222,11 +207,9 @@ public class RedisClientCommandHandler {
             return "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n";
         }
 
-        // Existing list: append and compute new size
         rv.listValue.addAll(values);
         int newSize = rv.listValue.size();
 
-        // After appending, serve any blocked waiters by popping from left
         Deque<BlockedWaiter> waiters = blocked.get(key);
         while (waiters != null && !waiters.isEmpty() && !rv.listValue.isEmpty()) {
             BlockedWaiter blockedWaiter = waiters.pollFirst();
@@ -276,8 +259,6 @@ public class RedisClientCommandHandler {
         RedisValue rv = store.get(key);
 
         if (rv == null) {
-            // create new list, LPUSH inserts left-to-right at head,
-            // so iterate values and add at 0 in order to get last element first
             List<String> list = new ArrayList<>();
             for (String v : values)
                 list.add(0, v);
@@ -285,7 +266,6 @@ public class RedisClientCommandHandler {
             return ":" + list.size() + "\r\n";
         }
 
-        // check expiry before using
         if (rv.expiry != null && System.currentTimeMillis() > rv.expiry) {
             store.remove(key);
             List<String> list = new ArrayList<>();
@@ -299,7 +279,6 @@ public class RedisClientCommandHandler {
             return "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n";
         }
 
-        // Prepend each value in order so that LPUSH a b c => [c,b,a]
         for (String v : values) {
             rv.listValue.add(0, v);
         }
@@ -315,7 +294,6 @@ public class RedisClientCommandHandler {
         if (rv == null)
             return ":0\r\n";
 
-        // expiry check
         if (rv.expiry != null && System.currentTimeMillis() > rv.expiry) {
             store.remove(key);
             return ":0\r\n";
@@ -329,12 +307,11 @@ public class RedisClientCommandHandler {
     }
 
     public String handleLPOP(List<String> cmd) {
-        // LPOP key [count]
         if (cmd.size() < 2)
             return "-ERR wrong number of arguments for 'LPOP'\r\n";
 
         String key = cmd.get(1);
-        int count = 1; // default
+        int count = 1;
         boolean withCount = false;
         if (cmd.size() >= 3) {
             try {
@@ -349,14 +326,12 @@ public class RedisClientCommandHandler {
 
         RedisValue rv = store.get(key);
         if (rv == null) {
-            // key missing
             if (withCount)
-                return "*0\r\n"; // empty array
+                return "*0\r\n";
             else
-                return "$-1\r\n"; // null bulk
+                return "$-1\r\n";
         }
 
-        // expiry check
         if (rv.expiry != null && System.currentTimeMillis() > rv.expiry) {
             store.remove(key);
             if (withCount)
@@ -382,20 +357,18 @@ public class RedisClientCommandHandler {
             StringBuilder out = new StringBuilder();
             out.append("*").append(n).append("\r\n");
             for (int i = 0; i < n; i++) {
-                String v = list.remove(0); // pop from left
+                String v = list.remove(0);
                 out.append("$").append(v.length()).append("\r\n");
                 out.append(v).append("\r\n");
             }
             return out.toString();
         } else {
-            // single element -> return bulk string
             String v = list.remove(0);
             return "$" + v.length() + "\r\n" + v + "\r\n";
         }
     }
 
     public String handleBLPOP(List<String> cmd, SelectionKey currentKey) {
-        // BLPOP key timeout (timeout is seconds).
         if (cmd.size() < 3)
             return "-ERR wrong number of arguments for 'BLPOP'\r\n";
         String key = cmd.get(1);
@@ -412,9 +385,7 @@ public class RedisClientCommandHandler {
         }
 
         RedisValue rv = store.get(key);
-        // if list exists and has elements -> behave like LPOP and return immediately as array [key, value]
         if (rv != null) {
-            // expiry check
             if (rv.expiry != null && System.currentTimeMillis() > rv.expiry) {
                 store.remove(key);
                 rv = null;
@@ -432,14 +403,11 @@ public class RedisClientCommandHandler {
             return out.toString();
         }
 
-        // Otherwise, no element now -> block this client
         Deque<BlockedWaiter> waiters = blocked.computeIfAbsent(key, k -> new ArrayDeque<>());
         waiters.addLast(new BlockedWaiter(currentKey, deadlineMs));
 
-        // disable read interest for this key so we don't try to read more from a blocked client
         currentKey.interestOps(0);
 
-        // return null to indicate no immediate response (client is blocked)
         return null;
     }
 
@@ -458,13 +426,12 @@ public class RedisClientCommandHandler {
                 BlockedWaiter bw = queue.peekFirst();
                 if (bw == null)
                     break;
-                // Only time out those with deadlines; leave indefinite ones in place
                 if (bw.deadlineMs != null && now >= bw.deadlineMs) {
                     queue.pollFirst();
                     SelectionKey sk = bw.key;
                     try {
                         SocketChannel sc = (SocketChannel) sk.channel();
-                        String resp = "$-1\r\n"; // BLPOP/XREAD timeout => null bulk in RESP2
+                        String resp = "$-1\r\n";
                         ByteBuffer buf = ByteBuffer.wrap(resp.getBytes(StandardCharsets.UTF_8));
                         while (buf.hasRemaining())
                             sc.write(buf);
@@ -477,7 +444,6 @@ public class RedisClientCommandHandler {
                         sk.cancel();
                         RedisClients.remove(sk.channel());
                     }
-                    // If this waiter was an XREAD waiter, remove it from all other queues
                     if (bw.isXRead && bw.xreadStreamKeys != null) {
                         for (String otherKey : bw.xreadStreamKeys) {
                             if (otherKey.equals(entry.getKey()))
@@ -489,8 +455,6 @@ public class RedisClientCommandHandler {
                         }
                     }
                 } else {
-                    // Not timed out (either no deadline or deadline not reached). Move to back
-                    // to ensure fair processing and allow checking subsequent items.
                     queue.addLast(queue.pollFirst());
                 }
             }
@@ -502,7 +466,6 @@ public class RedisClientCommandHandler {
     }
 
     public String handleLRANGE(List<String> cmd) {
-        // LRANGE key start stop
         if (cmd.size() < 4)
             return "-ERR wrong number of arguments for 'LRANGE'\r\n";
 
@@ -517,11 +480,9 @@ public class RedisClientCommandHandler {
 
         RedisValue rv = store.get(key);
         if (rv == null) {
-            // non-existing list => empty array
             return "*0\r\n";
         }
 
-        // check expiry
         if (rv.expiry != null && System.currentTimeMillis() > rv.expiry) {
             store.remove(key);
             return "*0\r\n";
@@ -534,13 +495,11 @@ public class RedisClientCommandHandler {
         List<String> list = rv.listValue;
         int size = list.size();
 
-        // convert negative indexes
         if (start < 0)
             start = size + start;
         if (stop < 0)
             stop = size + stop;
 
-        // clamp
         if (start < 0)
             start = 0;
         if (stop >= size)
@@ -550,7 +509,6 @@ public class RedisClientCommandHandler {
             return "*0\r\n";
         }
 
-        // build RESP array of elements from start..stop inclusive
         int count = stop - start + 1;
         StringBuilder out = new StringBuilder();
         out.append("*").append(count).append("\r\n");
@@ -613,15 +571,12 @@ public class RedisClientCommandHandler {
 
             rv.streamStore.put(entry_id, fields);
 
-            // Notify any XREAD waiters waiting on this stream
             Deque<BlockedWaiter> waiters = blocked.get(stream_key);
             if (waiters != null && !waiters.isEmpty()) {
-                // Snapshot to avoid concurrent modification while we remove
                 List<BlockedWaiter> snapshot = new ArrayList<>(waiters);
                 for (BlockedWaiter bw : snapshot) {
                     if (bw == null) continue;
                     if (bw.isXRead) {
-                        // remove from all queues and respond
                         removeWaiterFromAllQueues(bw);
                         respondToXReadWaiter(bw);
                     }
@@ -630,14 +585,12 @@ public class RedisClientCommandHandler {
 
             return "$" + entry_id.length() + "\r\n" + entry_id + "\r\n";
         } else {
-            // First entry for a new stream
             TreeMap<String, Map<String, String>> stream = new TreeMap<>(new StreamIdComparator());
             stream.put(entry_id, fields);
 
             RedisValue streamValue = new RedisValue(stream);
             store.put(stream_key, streamValue);
 
-            // Notify any XREAD waiters waiting on this stream
             Deque<BlockedWaiter> waiters = blocked.get(stream_key);
             if (waiters != null && !waiters.isEmpty()) {
                 List<BlockedWaiter> snapshot = new ArrayList<>(waiters);
@@ -712,11 +665,9 @@ public class RedisClientCommandHandler {
         if (id == null) return null;
         id = id.trim();
         if (id.equals("-")) {
-            // beginning of stream
             return "0-0";
         }
         if (id.equals("+")) {
-            // end of stream
             return Long.toString(Long.MAX_VALUE) + "-" + Long.toString(Long.MAX_VALUE);
         }
         if (id.contains("-")) {
@@ -733,7 +684,6 @@ public class RedisClientCommandHandler {
     }
 
     public String handleXRANGE(List<String> cmd) {
-        // XRANGE key start end
         if (cmd.size() < 4)
             return "-ERR wrong number of arguments for 'XRANGE'\r\n";
 
@@ -755,12 +705,10 @@ public class RedisClientCommandHandler {
         if (rv.streamStore == null || rv.streamStore.isEmpty())
             return "*0\r\n";
 
-        // get submap inclusive
         SortedMap<String, Map<String, String>> range;
         try {
             range = rv.streamStore.subMap(start_id, true, end_id, true);
         } catch (IllegalArgumentException e) {
-            // if comparator or ids are malformed, return empty
             return "*0\r\n";
         }
 
@@ -774,14 +722,11 @@ public class RedisClientCommandHandler {
             String entryId = entry.getKey();
             Map<String, String> fields = entry.getValue();
 
-            // inner array with two items: id, and an array of key/value strings
             out.append("*2\r\n");
 
-            // id bulk string
             out.append("$").append(entryId.length()).append("\r\n");
             out.append(entryId).append("\r\n");
 
-            // fields array
             int kvCount = fields.size() * 2;
             out.append("*").append(kvCount).append("\r\n");
             for (Map.Entry<String, String> kv : fields.entrySet()) {
@@ -797,13 +742,6 @@ public class RedisClientCommandHandler {
         return out.toString();
     }
 
-    /**
-     * Blocking-capable XREAD (supports: XREAD [BLOCK <ms>] STREAMS <k1>.. <kN> <id1>.. <idN>).
-     * - If data is available immediately, returns RESP reply string.
-     * - If no data and BLOCK is not specified, returns "*0\r\n" (empty array).
-     * - If no data and BLOCK specified, registers a waiter and returns null to indicate the client
-     *   is now blocked (the selector loop must not write a reply).
-     */
     public String handleXREAD(List<String> cmd, SelectionKey currentKey) {
         if (cmd.size() < 3)
             return "-ERR wrong number of arguments for 'XREAD'\r\n";
@@ -813,15 +751,17 @@ public class RedisClientCommandHandler {
         long blockMs = 0;
         Long deadlineMs = null;
 
-        // Optional BLOCK <ms>
         if (idx < cmd.size() && "BLOCK".equalsIgnoreCase(cmd.get(idx))) {
             if (idx + 1 >= cmd.size())
                 return "-ERR syntax error\r\n";
             try {
                 blockMs = Long.parseLong(cmd.get(idx + 1));
                 isBlocking = true;
-                if (blockMs > 0)
+                if (blockMs > 0) {
                     deadlineMs = System.currentTimeMillis() + blockMs;
+                } else {
+                    deadlineMs = null;
+                }
             } catch (NumberFormatException e) {
                 return "-ERR value is not an integer or out of range\r\n";
             }
@@ -849,7 +789,6 @@ public class RedisClientCommandHandler {
             idsRaw.add(cmd.get(idx + numStreams + i));
         }
 
-        // For each stream, collect entries with ID > provided ID (exclusive)
         List<Map.Entry<String, SortedMap<String, Map<String, String>>>> results = new ArrayList<>();
         for (int i = 0; i < numStreams; i++) {
             String streamKey = streamKeys.get(i);
@@ -858,13 +797,12 @@ public class RedisClientCommandHandler {
 
             RedisValue rv = store.get(streamKey);
             if (rv == null || !rv.isStream() || rv.streamStore == null || rv.streamStore.isEmpty()) {
-                // no entries for this stream -> skip
                 continue;
             }
 
             SortedMap<String, Map<String, String>> tail;
             try {
-                tail = rv.streamStore.tailMap(startId, false); // exclusive
+                tail = rv.streamStore.tailMap(startId, false);
             } catch (IllegalArgumentException e) {
                 continue;
             }
@@ -874,7 +812,6 @@ public class RedisClientCommandHandler {
         }
 
         if (!results.isEmpty()) {
-            // immediate response (non-blocking or data already present)
             StringBuilder out = new StringBuilder();
             out.append("*").append(results.size()).append("\r\n");
 
@@ -882,28 +819,22 @@ public class RedisClientCommandHandler {
                 String streamKey = streamEntry.getKey();
                 SortedMap<String, Map<String, String>> entries = streamEntry.getValue();
 
-                // stream element: array of 2 [stream-name, [entries...]]
                 out.append("*2\r\n");
 
-                // stream name bulk
                 out.append("$").append(streamKey.length()).append("\r\n");
                 out.append(streamKey).append("\r\n");
 
-                // entries array
                 out.append("*").append(entries.size()).append("\r\n");
 
                 for (Map.Entry<String, Map<String, String>> e : entries.entrySet()) {
                     String entryId = e.getKey();
                     Map<String, String> fields = e.getValue();
 
-                    // each entry is an array of 2: [id, [field, value, ...]]
                     out.append("*2\r\n");
 
-                    // id bulk
                     out.append("$").append(entryId.length()).append("\r\n");
                     out.append(entryId).append("\r\n");
 
-                    // fields array (flat list of strings)
                     int kvCount = fields.size() * 2;
                     out.append("*").append(kvCount).append("\r\n");
                     for (Map.Entry<String, String> kv : fields.entrySet()) {
@@ -920,13 +851,10 @@ public class RedisClientCommandHandler {
             return out.toString();
         }
 
-        // No immediate data
         if (!isBlocking) {
-            // non-blocking and no results -> empty array
             return "*0\r\n";
         }
 
-        // Create and register a blocking XREAD waiter on each stream
         BlockedWaiter waiter = new BlockedWaiter(currentKey, deadlineMs, streamKeys, idsRaw);
 
         for (String s : streamKeys) {
@@ -934,14 +862,11 @@ public class RedisClientCommandHandler {
             q.addLast(waiter);
         }
 
-        // disable read interest for this key so we don't try to read more from a blocked client
         currentKey.interestOps(0);
 
-        // return null to indicate no immediate response (client is blocked)
         return null;
     }
 
-    // Helper to remove waiter from all queues it's present in
     private void removeWaiterFromAllQueues(BlockedWaiter waiter) {
         if (waiter == null)
             return;
@@ -959,13 +884,11 @@ public class RedisClientCommandHandler {
         }
     }
 
-    // Build and write XREAD response for a blocked waiter (called when stream got new data).
     private void respondToXReadWaiter(BlockedWaiter waiter) {
         if (waiter == null || !waiter.isXRead)
             return;
         SelectionKey sk = waiter.key;
         if (sk == null) {
-            // Should not happen but guard
             return;
         }
         List<String> streamKeys = waiter.xreadStreamKeys;
@@ -994,7 +917,6 @@ public class RedisClientCommandHandler {
 
         String resp;
         if (results.isEmpty()) {
-            // No data yet (race). Return null-bulk to the client.
             resp = "$-1\r\n";
         } else {
             StringBuilder out = new StringBuilder();
@@ -1004,28 +926,22 @@ public class RedisClientCommandHandler {
                 String streamKey = streamEntry.getKey();
                 SortedMap<String, Map<String, String>> entries = streamEntry.getValue();
 
-                // stream element: array of 2 [stream-name, [entries...]]
                 out.append("*2\r\n");
 
-                // stream name bulk
                 out.append("$").append(streamKey.length()).append("\r\n");
                 out.append(streamKey).append("\r\n");
 
-                // entries array
                 out.append("*").append(entries.size()).append("\r\n");
 
                 for (Map.Entry<String, Map<String, String>> e : entries.entrySet()) {
                     String entryId = e.getKey();
                     Map<String, String> fields = e.getValue();
 
-                    // each entry is an array of 2: [id, [field, value, ...]]
                     out.append("*2\r\n");
 
-                    // id bulk
                     out.append("$").append(entryId.length()).append("\r\n");
                     out.append(entryId).append("\r\n");
 
-                    // fields array (flat list of strings)
                     int kvCount = fields.size() * 2;
                     out.append("*").append(kvCount).append("\r\n");
                     for (Map.Entry<String, String> kv : fields.entrySet()) {
