@@ -433,7 +433,7 @@ public class RedisClientCommandHandler {
                     SelectionKey sk = bw.key;
                     try {
                         SocketChannel sc = (SocketChannel) sk.channel();
-                        String resp = "$-1\r\n";
+                        String resp = "*-1\r\n";
                         ByteBuffer buf = ByteBuffer.wrap(resp.getBytes(StandardCharsets.UTF_8));
                         while (buf.hasRemaining())
                             sc.write(buf);
@@ -1001,8 +1001,18 @@ public class RedisClientCommandHandler {
     }
 
     public String handleINFO() {
-        if(is_slave) return "$10\r\nrole:slave\r\n";
-        return "$11\r\nrole:master\r\n";
+        StringBuilder info = new StringBuilder();
+
+        if (is_slave) {
+            info.append("role:slave\r\n");
+        } else {
+            info.append("role:master\r\n");
+            info.append("master_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb\r\n");
+            info.append("master_repl_offset:0\r\n");
+        }
+    
+        String data = info.toString();
+        return "$" + data.length() + "\r\n" + data + "\r\n";
     }
 
 }
