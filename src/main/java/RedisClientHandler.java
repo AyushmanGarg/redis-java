@@ -7,10 +7,12 @@ import java.io.IOException;
 public class RedisClientHandler {
     private Selector RedisServerSelector;
     RedisClientCommandHandler cmdHandler;
+    Boolean is_slave = false;
 
-    public RedisClientHandler(Selector RedisServerSelector) {
+    public RedisClientHandler(Selector RedisServerSelector, Boolean is_slave) {
         this.RedisServerSelector = RedisServerSelector;
-        this.cmdHandler = new RedisClientCommandHandler();
+        this.cmdHandler = new RedisClientCommandHandler(is_slave);
+        this.is_slave = is_slave;
     }
 
     public void handleAccept(SelectionKey key) {

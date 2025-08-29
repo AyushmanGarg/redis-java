@@ -7,6 +7,7 @@ import java.io.IOException;
 public class RedisClientCommandHandler {
     private Map<String, RedisValue> store;
     public Set<SocketChannel> RedisClients;
+    public Boolean is_slave = false;
 
     private static class BlockedWaiter {
         final SelectionKey key;
@@ -36,10 +37,11 @@ public class RedisClientCommandHandler {
 
     private final Map<String, Deque<BlockedWaiter>> blocked;
 
-    public RedisClientCommandHandler() {
+    public RedisClientCommandHandler(Boolean is_slave) {
         this.store = new HashMap<>();
         this.RedisClients = new HashSet<>();
         this.blocked = new HashMap<>();
+        this.is_slave = is_slave;
     }
 
     public List<String> parseRESP(StringBuilder sb) {
@@ -999,6 +1001,7 @@ public class RedisClientCommandHandler {
     }
 
     public String handleINFO() {
+        if(is_slave) return "$10\r\nrole:slave\r\n";
         return "$11\r\nrole:master\r\n";
     }
 

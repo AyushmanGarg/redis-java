@@ -7,16 +7,18 @@ public class RedisServer {
     private ServerSocketChannel RedisServer;
     private Selector RedisServerSelector;
     RedisClientHandler redisClientHandler;
+    public Boolean is_slave;
 
-    public RedisServer(int port) {
+    public RedisServer(int port, Boolean is_slave) {
         try {
             this.RedisServerSelector = Selector.open();
             this.RedisServer = ServerSocketChannel.open();
             this.RedisServer.bind(new InetSocketAddress(port));
             this.RedisServer.configureBlocking(false);
             this.RedisServer.register(RedisServerSelector, SelectionKey.OP_ACCEPT);
-            this.redisClientHandler = new RedisClientHandler(RedisServerSelector);
+            this.redisClientHandler = new RedisClientHandler(RedisServerSelector, is_slave);
             System.out.println("Redis Single Threaded server listening on " + port);
+            this.is_slave = is_slave;
         } catch (Exception e) {
             System.err.println("Redis Server Setup error: " + e.getMessage());
         }
