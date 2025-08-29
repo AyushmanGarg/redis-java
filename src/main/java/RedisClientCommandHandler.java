@@ -998,4 +998,8 @@ public class RedisClientCommandHandler {
         }
     }
 
+    public String handleINFO() {
+        return "$11\r\nrole:master\r\n";
+    }
+
 }
