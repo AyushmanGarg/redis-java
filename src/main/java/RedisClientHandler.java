@@ -130,6 +130,9 @@ public class RedisClientHandler {
             
             case "REPLCONF":
                 return cmdHandler.handleREPLCONF();
+            
+            case "PSYNC":
+                return cmdHandler.handlePSYNC();
 
             default:
                 return "-ERR unknown command '" + cmd.get(0) + "'\r\n";
