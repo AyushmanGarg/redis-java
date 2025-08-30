@@ -127,6 +127,9 @@ public class RedisClientHandler {
 
             case "INFO":
                 return cmdHandler.handleINFO();
+            
+            case "REPLCONF":
+                return cmdHandler.handleREPLCONF();
 
             default:
                 return "-ERR unknown command '" + cmd.get(0) + "'\r\n";

@@ -1,11 +1,24 @@
 import java.net.Socket;
+import java.io.InputStream;
 import java.io.IOException;
-import java.util.Arrays; // ✅ keep this
+import java.util.Arrays;
 
 public class Main {
+
+  private static String readLineFrom(InputStream in) throws IOException {
+    StringBuilder sb = new StringBuilder();
+    int c;
+    while ((c = in.read()) != -1) {
+      sb.append((char) c);
+      if (c == '\n')
+        break; // stop at end of line
+    }
+    return sb.toString();
+  }
+
   public static void main(String[] args) throws IOException { // ✅ declare throws
     System.out.println(Arrays.toString(args));
-
+    // [--port, 6380, --replicaof, localhost 6379]
     int port = 6379; // Default Redis port
     if (args.length >= 2) {
       port = Integer.parseInt(args[1]);
@@ -18,12 +31,23 @@ public class Main {
 
     if (is_slave) {
       String[] address = args[3].split(" ");
+      System.out.println(Arrays.toString(address));
       String hostAddr = address[0];
       int portAddr = Integer.parseInt(address[1]);
 
-      try (Socket slave = new Socket(hostAddr, portAddr)) { // ✅ auto-close
+      try (Socket slave = new Socket(hostAddr, portAddr)) {
+        InputStream in = slave.getInputStream();
         slave.getOutputStream().write("*1\r\n$4\r\nPING\r\n".getBytes());
         slave.getOutputStream().flush();
+        readLineFrom(in);
+        // *3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n6380\r\n
+        slave.getOutputStream().write(("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n" + port + "\r\n").getBytes());
+        slave.getOutputStream().flush();
+        readLineFrom(in);
+        slave.getOutputStream().write("*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n".getBytes());
+        slave.getOutputStream().flush();
+        readLineFrom(in);
+        slave.close();
       }
     }
 

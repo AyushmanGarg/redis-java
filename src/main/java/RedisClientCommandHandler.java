@@ -1015,4 +1015,8 @@ public class RedisClientCommandHandler {
         return "$" + data.length() + "\r\n" + data + "\r\n";
     }
 
+    public String handleREPLCONF() {
+        return "+OK\r\n";
+    }
+
 }
