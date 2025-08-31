@@ -57,29 +57,32 @@ public class RedisClientHandler {
                     List<String> command = cmdHandler.parseRESP(sb);
                     if (command == null)
                         break; // not enough data yet
-                
+
                     StringBytesPair reply = executeCommand(command, key);
-                
+
                     // === Send response back to client (same as before) ===
                     if (reply.getBytes() == null && reply.getString() != null) {
                         ByteBuffer response = ByteBuffer.wrap(reply.getString().getBytes(StandardCharsets.UTF_8));
-                        while (response.hasRemaining()) client.write(response);
+                        while (response.hasRemaining())
+                            client.write(response);
                     } else if (reply.getString() != null) {
                         ByteBuffer response = ByteBuffer.wrap(reply.getString().getBytes(StandardCharsets.UTF_8));
-                        while (response.hasRemaining()) client.write(response);
-                
+                        while (response.hasRemaining())
+                            client.write(response);
+
                         String bulk_resp_header = "$" + reply.getBytes().length + "\r\n";
                         client.write(ByteBuffer.wrap(bulk_resp_header.getBytes(StandardCharsets.UTF_8)));
                         client.write(ByteBuffer.wrap(reply.getBytes()));
                     }
-                
+
                     // === Replication handling starts here ===
-                    if (!this.is_slave) {  // Only propagate if this server is master
+                    if (!this.is_slave) { // Only propagate if this server is master
                         boolean fromReplica = cmdHandler.ReplicaSockets.contains(client);
                         if (!fromReplica) {
                             String op = command.get(0).toUpperCase();
-                            if (op.equals("SET")) {
-                
+                            if (op.equals("SET") || op.equals("DEL") || op.equals("RPUSH") ||
+                                    op.equals("LPUSH") || op.equals("LPOP") || op.equals("XADD")) {
+
                                 // Build RESP array for original command
                                 StringBuilder sbuf = new StringBuilder();
                                 sbuf.append("*").append(command.size()).append("\r\n");
@@ -89,30 +92,34 @@ public class RedisClientHandler {
                                     sbuf.append(arg).append("\r\n");
                                 }
                                 byte[] payload = sbuf.toString().getBytes(StandardCharsets.UTF_8);
-                
-                                // Send to all replicas
+
+                                // Send to ALL replicas
                                 List<SocketChannel> deadReplicas = new ArrayList<>();
                                 for (SocketChannel replica : cmdHandler.ReplicaSockets) {
                                     try {
                                         ByteBuffer out = ByteBuffer.wrap(payload);
-                                        while (out.hasRemaining()) replica.write(out);
+                                        while (out.hasRemaining())
+                                            replica.write(out);
                                     } catch (IOException e) {
                                         deadReplicas.add(replica);
                                     }
                                 }
+                                // Remove replicas that disconnected
                                 cmdHandler.ReplicaSockets.removeAll(deadReplicas);
                             }
                         }
                     }
-                
+
                     // === If this client is a replica performing PSYNC, track it ===
                     if ("PSYNC".equalsIgnoreCase(command.get(0)) && !this.is_slave) {
                         if (!cmdHandler.ReplicaSockets.contains(client)) {
                             cmdHandler.ReplicaSockets.add(client);
+                            System.out.println("Replica registered: " + client);
                         }
                     }
+
                 }
-                
+
             }
         } catch (IOException e) {
             try {
@@ -124,7 +131,6 @@ public class RedisClientHandler {
         }
     }
 
-    
     // Execute supported commands
     private StringBytesPair executeCommand(List<String> cmd, SelectionKey currentKey) {
         if (cmd.isEmpty())
@@ -140,7 +146,7 @@ public class RedisClientHandler {
                 return new StringBytesPair(cmdHandler.handleECHO(cmd), null);
 
             case "SET":
-            return new StringBytesPair(cmdHandler.handleSET(cmd), null);
+                return new StringBytesPair(cmdHandler.handleSET(cmd), null);
 
             case "GET":
                 return new StringBytesPair(cmdHandler.handleGET(cmd), null);
@@ -165,27 +171,27 @@ public class RedisClientHandler {
 
             case "TYPE":
                 return new StringBytesPair(cmdHandler.handleTYPE(cmd), null);
-            
+
             case "XADD":
                 return new StringBytesPair(cmdHandler.handleXADD(cmd), null);
-            
+
             case "XRANGE":
                 return new StringBytesPair(cmdHandler.handleXRANGE(cmd), null);
-            
+
             case "XREAD":
                 return new StringBytesPair(cmdHandler.handleXREAD(cmd, currentKey), null);
 
             case "INFO":
                 return new StringBytesPair(cmdHandler.handleINFO(), null);
-            
+
             case "REPLCONF":
                 return new StringBytesPair(cmdHandler.handleREPLCONF(cmd), null);
-            
+
             case "PSYNC":
                 return cmdHandler.handlePSYNC();
 
             default:
-            return new StringBytesPair("-ERR unknown command\r\n", null);
+                return new StringBytesPair("-ERR unknown command\r\n", null);
         }
     }
 }
