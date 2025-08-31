@@ -3,6 +3,8 @@ import java.util.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 public class RedisClientCommandHandler {
     private Map<String, RedisValue> store;
@@ -1019,9 +1021,20 @@ public class RedisClientCommandHandler {
         return "+OK\r\n";
     }
 
-    public String handlePSYNC() {
+    public StringBytesPair handlePSYNC() {
+        String str = "+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n";
+
         // +FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n
-        return "+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n";
+        String base64_representation_rdb = "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==";
+        byte[] rdbBytes = Base64.getDecoder().decode(base64_representation_rdb);
+        // String rdbString = new String(rdbBytes, StandardCharsets.UTF_8);
+        // $<length_of_file>\r\n
+        // slave.getOutputStream().write(("$"+hex_representation_rdb.length()+"\r\n"+hex_representation_rdb).getBytes());
+        // slave.getOutputStream().flush();
+        
+
+        StringBytesPair reply = new StringBytesPair(str, rdbBytes);
+        return reply;
     }
 
 }

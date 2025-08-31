@@ -56,12 +56,29 @@ public class RedisClientHandler {
                     if (command == null)
                         break; // not enough data yet
 
-                    String reply = executeCommand(command, key);
-                    if (reply != null) {
-                        ByteBuffer response = ByteBuffer.wrap(reply.getBytes(StandardCharsets.UTF_8));
+                    StringBytesPair reply = executeCommand(command, key);
+
+                    if (reply.getBytes() == null && reply.getString()!=null) {
+                        ByteBuffer response = ByteBuffer.wrap(reply.getString().getBytes(StandardCharsets.UTF_8));
                         while (response.hasRemaining()) {
                             client.write(response);
                         }
+                    } else if(reply.getString()!=null) {
+                        ByteBuffer response = ByteBuffer.wrap(reply.getString().getBytes(StandardCharsets.UTF_8));
+                        while (response.hasRemaining()) {
+                            client.write(response);
+                        }
+
+                        // 1. Send RESP bulk string header
+                        String bulk_resp_header = "$" + reply.getBytes().length + "\r\n";
+                        client.write(ByteBuffer.wrap(bulk_resp_header.getBytes(StandardCharsets.UTF_8)));
+
+                        // 2. Send the actual binary data
+                        client.write(ByteBuffer.wrap(reply.getBytes()));
+
+                        // 3. Send RESP trailer
+                        // client.write(ByteBuffer.wrap("\r\n".getBytes(StandardCharsets.UTF_8)));
+
                     }
                 }
             }
@@ -75,67 +92,68 @@ public class RedisClientHandler {
         }
     }
 
+    
     // Execute supported commands
-    private String executeCommand(List<String> cmd, SelectionKey currentKey) {
+    private StringBytesPair executeCommand(List<String> cmd, SelectionKey currentKey) {
         if (cmd.isEmpty())
-            return "-ERR empty command\r\n";
+            return new StringBytesPair("-ERR empty command\r\n", null);
 
         String op = cmd.get(0).toUpperCase();
 
         switch (op) {
             case "PING":
-                return cmdHandler.handlePING();
+                return new StringBytesPair(cmdHandler.handlePING(), null);
 
             case "ECHO":
-                return cmdHandler.handleECHO(cmd);
+                return new StringBytesPair(cmdHandler.handleECHO(cmd), null);
 
             case "SET":
-                return cmdHandler.handleSET(cmd);
+            return new StringBytesPair(cmdHandler.handleSET(cmd), null);
 
             case "GET":
-                return cmdHandler.handleGET(cmd);
+                return new StringBytesPair(cmdHandler.handleGET(cmd), null);
 
             case "RPUSH":
-                return cmdHandler.handleRPUSH(cmd);
+                return new StringBytesPair(cmdHandler.handleRPUSH(cmd), null);
 
             case "LPUSH":
-                return cmdHandler.handleLPUSH(cmd);
+                return new StringBytesPair(cmdHandler.handleLPUSH(cmd), null);
 
             case "LLEN":
-                return cmdHandler.handleLLEN(cmd);
+                return new StringBytesPair(cmdHandler.handleLLEN(cmd), null);
 
             case "LPOP":
-                return cmdHandler.handleLPOP(cmd);
+                return new StringBytesPair(cmdHandler.handleLPOP(cmd), null);
 
             case "BLPOP":
-                return cmdHandler.handleBLPOP(cmd, currentKey);
+                return new StringBytesPair(cmdHandler.handleBLPOP(cmd, currentKey), null);
 
             case "LRANGE":
-                return cmdHandler.handleLRANGE(cmd);
+                return new StringBytesPair(cmdHandler.handleLRANGE(cmd), null);
 
             case "TYPE":
-                return cmdHandler.handleTYPE(cmd);
+                return new StringBytesPair(cmdHandler.handleTYPE(cmd), null);
             
             case "XADD":
-                return cmdHandler.handleXADD(cmd);
+                return new StringBytesPair(cmdHandler.handleXADD(cmd), null);
             
             case "XRANGE":
-                return cmdHandler.handleXRANGE(cmd);
+                return new StringBytesPair(cmdHandler.handleXRANGE(cmd), null);
             
             case "XREAD":
-                return cmdHandler.handleXREAD(cmd, currentKey);
+                return new StringBytesPair(cmdHandler.handleXREAD(cmd, currentKey), null);
 
             case "INFO":
-                return cmdHandler.handleINFO();
+                return new StringBytesPair(cmdHandler.handleINFO(), null);
             
             case "REPLCONF":
-                return cmdHandler.handleREPLCONF();
+                return new StringBytesPair(cmdHandler.handleREPLCONF(), null);
             
             case "PSYNC":
                 return cmdHandler.handlePSYNC();
 
             default:
-                return "-ERR unknown command '" + cmd.get(0) + "'\r\n";
+            return new StringBytesPair("-ERR unknown command\r\n", null);
         }
     }
 }
