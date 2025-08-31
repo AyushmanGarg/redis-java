@@ -10,6 +10,7 @@ public class RedisClientCommandHandler {
     private Map<String, RedisValue> store;
     public Set<SocketChannel> RedisClients;
     public Boolean is_slave = false;
+    public List<SocketChannel> ReplicaSockets = new ArrayList<>();
 
     private static class BlockedWaiter {
         final SelectionKey key;
@@ -44,6 +45,7 @@ public class RedisClientCommandHandler {
         this.RedisClients = new HashSet<>();
         this.blocked = new HashMap<>();
         this.is_slave = is_slave;
+        this.ReplicaSockets = new ArrayList<SocketChannel>();
     }
 
     public List<String> parseRESP(StringBuilder sb) {
@@ -1017,7 +1019,9 @@ public class RedisClientCommandHandler {
         return "$" + data.length() + "\r\n" + data + "\r\n";
     }
 
-    public String handleREPLCONF() {
+    public String handleREPLCONF(List<String> cmd) {
+        System.out.println(cmd);
+        
         return "+OK\r\n";
     }
 

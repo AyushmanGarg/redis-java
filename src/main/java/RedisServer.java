@@ -8,6 +8,7 @@ public class RedisServer {
     private Selector RedisServerSelector;
     RedisClientHandler redisClientHandler;
     public Boolean is_slave;
+    RedisReplicaHandler RedisReplicaCmdHandler;
 
     public RedisServer(int port, Boolean is_slave) {
         try {
@@ -19,6 +20,7 @@ public class RedisServer {
             this.redisClientHandler = new RedisClientHandler(RedisServerSelector, is_slave);
             System.out.println("Redis Single Threaded server listening on " + port);
             this.is_slave = is_slave;
+            if(!this.is_slave) RedisReplicaCmdHandler = new RedisReplicaHandler();
         } catch (Exception e) {
             System.err.println("Redis Server Setup error: " + e.getMessage());
         }

@@ -3,16 +3,19 @@ import java.util.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
 import java.io.IOException;
+import java.net.Socket;
 
 public class RedisClientHandler {
     private Selector RedisServerSelector;
     RedisClientCommandHandler cmdHandler;
     Boolean is_slave = false;
+    // List<Socket> ReplicaSockets;
 
     public RedisClientHandler(Selector RedisServerSelector, Boolean is_slave) {
         this.RedisServerSelector = RedisServerSelector;
         this.cmdHandler = new RedisClientCommandHandler(is_slave);
         this.is_slave = is_slave;
+        // if(is_slave) ReplicaSockets = new List<Socket>();
     }
 
     public void handleAccept(SelectionKey key) {
@@ -50,37 +53,66 @@ public class RedisClientHandler {
                 sb.append(incoming); // accumulate input
                 buffer.clear();
 
-                // Try to parse commands
                 while (true) {
                     List<String> command = cmdHandler.parseRESP(sb);
                     if (command == null)
                         break; // not enough data yet
-
+                
                     StringBytesPair reply = executeCommand(command, key);
-
-                    if (reply.getBytes() == null && reply.getString()!=null) {
+                
+                    // === Send response back to client (same as before) ===
+                    if (reply.getBytes() == null && reply.getString() != null) {
                         ByteBuffer response = ByteBuffer.wrap(reply.getString().getBytes(StandardCharsets.UTF_8));
-                        while (response.hasRemaining()) {
-                            client.write(response);
-                        }
-                    } else if(reply.getString()!=null) {
+                        while (response.hasRemaining()) client.write(response);
+                    } else if (reply.getString() != null) {
                         ByteBuffer response = ByteBuffer.wrap(reply.getString().getBytes(StandardCharsets.UTF_8));
-                        while (response.hasRemaining()) {
-                            client.write(response);
-                        }
-
-                        // 1. Send RESP bulk string header
+                        while (response.hasRemaining()) client.write(response);
+                
                         String bulk_resp_header = "$" + reply.getBytes().length + "\r\n";
                         client.write(ByteBuffer.wrap(bulk_resp_header.getBytes(StandardCharsets.UTF_8)));
-
-                        // 2. Send the actual binary data
                         client.write(ByteBuffer.wrap(reply.getBytes()));
-
-                        // 3. Send RESP trailer
-                        // client.write(ByteBuffer.wrap("\r\n".getBytes(StandardCharsets.UTF_8)));
-
+                    }
+                
+                    // === Replication handling starts here ===
+                    if (!this.is_slave) {  // Only propagate if this server is master
+                        boolean fromReplica = cmdHandler.ReplicaSockets.contains(client);
+                        if (!fromReplica) {
+                            String op = command.get(0).toUpperCase();
+                            if (op.equals("SET")) {
+                
+                                // Build RESP array for original command
+                                StringBuilder sbuf = new StringBuilder();
+                                sbuf.append("*").append(command.size()).append("\r\n");
+                                for (String arg : command) {
+                                    byte[] argBytes = arg.getBytes(StandardCharsets.UTF_8);
+                                    sbuf.append("$").append(argBytes.length).append("\r\n");
+                                    sbuf.append(arg).append("\r\n");
+                                }
+                                byte[] payload = sbuf.toString().getBytes(StandardCharsets.UTF_8);
+                
+                                // Send to all replicas
+                                List<SocketChannel> deadReplicas = new ArrayList<>();
+                                for (SocketChannel replica : cmdHandler.ReplicaSockets) {
+                                    try {
+                                        ByteBuffer out = ByteBuffer.wrap(payload);
+                                        while (out.hasRemaining()) replica.write(out);
+                                    } catch (IOException e) {
+                                        deadReplicas.add(replica);
+                                    }
+                                }
+                                cmdHandler.ReplicaSockets.removeAll(deadReplicas);
+                            }
+                        }
+                    }
+                
+                    // === If this client is a replica performing PSYNC, track it ===
+                    if ("PSYNC".equalsIgnoreCase(command.get(0)) && !this.is_slave) {
+                        if (!cmdHandler.ReplicaSockets.contains(client)) {
+                            cmdHandler.ReplicaSockets.add(client);
+                        }
                     }
                 }
+                
             }
         } catch (IOException e) {
             try {
@@ -147,7 +179,7 @@ public class RedisClientHandler {
                 return new StringBytesPair(cmdHandler.handleINFO(), null);
             
             case "REPLCONF":
-                return new StringBytesPair(cmdHandler.handleREPLCONF(), null);
+                return new StringBytesPair(cmdHandler.handleREPLCONF(cmd), null);
             
             case "PSYNC":
                 return cmdHandler.handlePSYNC();

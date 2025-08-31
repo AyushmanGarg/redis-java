@@ -11,12 +11,12 @@ public class Main {
     while ((c = in.read()) != -1) {
       sb.append((char) c);
       if (c == '\n')
-        break; // stop at end of line
+        break; 
     }
     return sb.toString();
   }
 
-  public static void main(String[] args) throws IOException { // ✅ declare throws
+  public static void main(String[] args) throws IOException { 
     System.out.println(Arrays.toString(args));
     // [--port, 6380, --replicaof, localhost 6379]
     int port = 6379; // Default Redis port
@@ -34,6 +34,8 @@ public class Main {
       System.out.println(Arrays.toString(address));
       String hostAddr = address[0];
       int portAddr = Integer.parseInt(address[1]);
+
+      
 
       try (Socket slave = new Socket(hostAddr, portAddr)) {
         InputStream in = slave.getInputStream();

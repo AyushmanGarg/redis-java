@@ -1,4 +1,4 @@
- import java.util.*;
+import java.util.*;
 
 public class RedisValue {
     String stringValue;       // for SET/GET
